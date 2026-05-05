@@ -8,7 +8,7 @@
   "scripts": {
     "build": "tsc --outDir dist",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+    "test": "node --experimental-vm-modules node_modules/.bin/jest --coverage"
   },
   "keywords": ["amazon", "price-tracker", "keepa", "typescript"],
   "license": "MIT",
@@ -22,6 +22,13 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
-    "testMatch": ["**/src/**/*.test.ts"]
+    "testMatch": ["**/src/**/*.test.ts"],
+    "collectCoverageFrom": ["src/keepa/client.ts"],
+    "coverageThreshold": {
+      "global": {
+        "lines": 80,
+        "functions": 80
+      }
+    }
   }
 }
