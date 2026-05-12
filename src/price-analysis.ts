@@ -10,11 +10,13 @@ export interface AlertDecision {
   should_alert: boolean;
   current_price: number; // USD cents; -1 when no price data is available
   threshold: number;     // USD cents
-  drop_pct: number;      // (threshold - current_price) / threshold * 100; 0 when no data
+  drop_pct: number;      // (threshold - current_price) / threshold * 100; positive = below threshold, negative = above threshold; 0 when no data
 }
 
 function bestPrice(point: PriceDataPoint): number | null {
-  return point.priceAmazon ?? point.priceNew ?? point.priceUsed;
+  // Keepa represents "unavailable" as -1, not null — guard against the sentinel.
+  const v = point.priceAmazon ?? point.priceNew ?? point.priceUsed;
+  return v !== null && v > 0 ? v : null;
 }
 
 /**
@@ -34,11 +36,19 @@ function bestPrice(point: PriceDataPoint): number | null {
  *   (a genuine drop worth alerting on) and **negative** when the price is
  *   above the threshold (no alert). The name reflects the intended use-case;
  *   treat a negative value as "price is N% over threshold".
+ *
+ * - `thresholdCents` must be positive. Passing `0` or a negative value
+ *   returns `{ should_alert: false, current_price: -1, drop_pct: 0 }` —
+ *   a safe no-op rather than a divide-by-zero.
  */
 export function analyzePrice(
   history: PriceDataPoint[],
   thresholdCents: number,
 ): AlertDecision {
+  if (thresholdCents <= 0) {
+    return { should_alert: false, current_price: -1, threshold: thresholdCents, drop_pct: 0 };
+  }
+
   const latest = history.length > 0 ? history[history.length - 1] : null;
   const price = latest !== null ? bestPrice(latest) : null;
 

@@ -53,6 +53,19 @@ describe('analyzePrice', () => {
     expect(result.drop_pct).toBe(0);
   });
 
+  it('treats -1 (Keepa unavailable sentinel) as no price data', () => {
+    const result = analyzePrice([point(-1, null, null)], THRESHOLD);
+    expect(result.should_alert).toBe(false);
+    expect(result.current_price).toBe(-1);
+    expect(result.drop_pct).toBe(0);
+  });
+
+  it('returns should_alert false when thresholdCents is zero', () => {
+    const result = analyzePrice([point(500)], 0);
+    expect(result.should_alert).toBe(false);
+    expect(result.drop_pct).toBe(0);
+  });
+
   // ── price-field preference ──────────────────────────────────────────────────
 
   it('uses priceAmazon when available', () => {
