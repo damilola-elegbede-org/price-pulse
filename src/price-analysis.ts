@@ -17,6 +17,24 @@ function bestPrice(point: PriceDataPoint): number | null {
   return point.priceAmazon ?? point.priceNew ?? point.priceUsed;
 }
 
+/**
+ * Determine whether to alert based on the latest price in a history array.
+ *
+ * **Integration contracts for ENG-330 (Telegram dispatcher):**
+ *
+ * - All monetary values — `history[*].price*`, `thresholdCents`, and the
+ *   returned `current_price` / `threshold` — are **USD cents**, not dollars.
+ *   Divide by 100 only at display time.
+ *
+ * - `current_price === -1` is a sentinel meaning "no price data was available
+ *   in the history array". It is not a real price. Always check
+ *   `should_alert` (which will be `false`) before reading `current_price`.
+ *
+ * - `drop_pct` is **positive** when the current price is below the threshold
+ *   (a genuine drop worth alerting on) and **negative** when the price is
+ *   above the threshold (no alert). The name reflects the intended use-case;
+ *   treat a negative value as "price is N% over threshold".
+ */
 export function analyzePrice(
   history: PriceDataPoint[],
   thresholdCents: number,

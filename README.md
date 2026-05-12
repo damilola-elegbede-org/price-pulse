@@ -30,6 +30,7 @@ npm run build       # compile to dist/
 ## Project Status
 
 - [x] Repo scaffold (ENG-295)
+- [x] Price-comparison and alert-decision engine (ENG-377)
 - [ ] Keepa ingestion pipeline (ENG-265)
 - [ ] MVP sprint (ENG-254)
 
