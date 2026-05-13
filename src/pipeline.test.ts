@@ -24,47 +24,54 @@ describe('pipeline.run', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSpawnSync.mockReturnValue(SPAWN_SUCCESS);
+    process.env.TELEGRAM_SEND_SCRIPT = 'mock-telegram-send.sh';
   });
 
-  it('returns false and sends Telegram alert on non-2xx HTTP error', async () => {
+  afterEach(() => {
+    delete process.env.TELEGRAM_SEND_SCRIPT;
+  });
+
+  it('returns false and sends generic Telegram alert on non-2xx HTTP error', async () => {
     mockGetProductHistory.mockRejectedValue(new Error('Keepa API error: HTTP 429'));
     const result = await run(ASIN);
     expect(result).toBe(false);
     expect(mockSpawnSync).toHaveBeenCalledWith(
       expect.any(String),
-      ['--raw', expect.stringContaining('Keepa API error: HTTP 429')],
+      ['--raw', 'price-pulse: Keepa fetch failed — see pipeline logs'],
       { stdio: 'inherit' },
     );
   });
 
-  it('returns false and sends Telegram alert when response has no products', async () => {
+  it('returns false and sends generic Telegram alert when response has no products', async () => {
     mockGetProductHistory.mockRejectedValue(new Error(`No product found for ASIN: ${ASIN}`));
     const result = await run(ASIN);
     expect(result).toBe(false);
     expect(mockSpawnSync).toHaveBeenCalledWith(
       expect.any(String),
-      ['--raw', expect.stringContaining('No product found for ASIN')],
+      ['--raw', 'price-pulse: Keepa fetch failed — see pipeline logs'],
       { stdio: 'inherit' },
     );
   });
 
-  it('returns false and sends Telegram alert on invalid JSON response', async () => {
+  it('returns false and sends generic Telegram alert on invalid JSON response', async () => {
     mockGetProductHistory.mockRejectedValue(new SyntaxError('Unexpected token < in JSON'));
     const result = await run(ASIN);
     expect(result).toBe(false);
     expect(mockSpawnSync).toHaveBeenCalledWith(
       expect.any(String),
-      ['--raw', expect.stringContaining('Unexpected token')],
+      ['--raw', 'price-pulse: Keepa fetch failed — see pipeline logs'],
       { stdio: 'inherit' },
     );
   });
 
-  it('truncates alert message to 120 chars when error detail is very long', async () => {
-    mockGetProductHistory.mockRejectedValue(new Error('x'.repeat(200)));
+  it('logs error detail to stderr and omits it from the Telegram message', async () => {
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockGetProductHistory.mockRejectedValue(new Error('sensitive-api-key=abc123'));
     await run(ASIN);
+    expect(consoleSpy).toHaveBeenCalledWith('[keepa] fetch error:', 'sensitive-api-key=abc123');
     const sentMsg = (mockSpawnSync.mock.calls[0] as [string, string[]])[1][1];
-    expect(sentMsg.length).toBeLessThanOrEqual(120);
-    expect(sentMsg).toMatch(/^price-pulse:/);
+    expect(sentMsg).not.toContain('sensitive-api-key=abc123');
+    consoleSpy.mockRestore();
   });
 
   it('prefixes the alert with "price-pulse:"', async () => {
@@ -83,6 +90,16 @@ describe('pipeline.run', () => {
       expect.stringContaining('[price-pulse] alert delivery failed'),
       expect.any(String),
     );
+    consoleSpy.mockRestore();
+  });
+
+  it('does not call spawnSync and logs to stderr when TELEGRAM_SEND_SCRIPT is not set', async () => {
+    delete process.env.TELEGRAM_SEND_SCRIPT;
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockGetProductHistory.mockRejectedValue(new Error('HTTP 429'));
+    await run(ASIN);
+    expect(mockSpawnSync).not.toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('TELEGRAM_SEND_SCRIPT'));
     consoleSpy.mockRestore();
   });
 

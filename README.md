@@ -43,9 +43,9 @@ Fetched N price points for ASIN B001E4KFG0
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `ASIN` | Yes (CLI mode) | — | Amazon product ASIN to fetch pricing history for |
-| `TELEGRAM_SEND_SCRIPT` | No | `/Users/daelegbe/BareClaude/clara/scripts/telegram-send.sh` | Path to the Telegram send script used for fetch-failure alerts |
+| `TELEGRAM_SEND_SCRIPT` | Yes (CLI mode) | — | Path to the Telegram send script used for fetch-failure alerts |
 
-> **Note:** The default `TELEGRAM_SEND_SCRIPT` path is machine-specific and **must** be overridden in any non-local environment. The script must accept a `--raw <message>` argument.
+> **Note:** `TELEGRAM_SEND_SCRIPT` is required when running the pipeline in CLI mode. The pipeline exits with code 1 if it is unset or the script is not executable. The script must accept a `--raw <message>` argument. Error detail is written to stderr (not included in the Telegram message).
 
 ## Local Development
 

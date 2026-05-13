@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- Keepa fetch-failure alerting in the daily pipeline: errors send a Telegram alert
-  (prefixed `price-pulse:`, truncated to 120 chars) and exit the pipeline with code 1.
-  Configure alert delivery via `TELEGRAM_SEND_SCRIPT` env var.
+- Keepa fetch-failure alerting in the daily pipeline: errors send a generic Telegram alert
+  (`price-pulse: Keepa fetch failed — see pipeline logs`) and exit with code 1. Full error
+  detail is written to stderr only. `TELEGRAM_SEND_SCRIPT` is required in CLI mode (the
+  pipeline exits early if unset or the script is not executable).
