@@ -16,6 +16,37 @@ Price Pulse ingests historical and real-time price data from Amazon (via Keepa) 
 | Test runner | Jest + ts-jest |
 | CI | GitHub Actions |
 
+## Running the Pipeline
+
+Build the project first, then invoke with the target ASIN:
+
+```bash
+npm run build
+ASIN=B001E4KFG0 node dist/pipeline.js
+```
+
+**Exit codes**
+
+| Code | Meaning |
+|---|---|
+| `0` | Success |
+| `1` | Keepa fetch failure, unexpected error, or missing `ASIN` |
+
+**Expected output on success**
+
+```
+Fetched N price points for ASIN B001E4KFG0
+```
+
+## Configuration
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `ASIN` | Yes (CLI mode) | — | Amazon product ASIN to fetch pricing history for |
+| `TELEGRAM_SEND_SCRIPT` | No | `/Users/daelegbe/BareClaude/clara/scripts/telegram-send.sh` | Path to the Telegram send script used for fetch-failure alerts |
+
+> **Note:** The default `TELEGRAM_SEND_SCRIPT` path is machine-specific and **must** be overridden in any non-local environment. The script must accept a `--raw <message>` argument.
+
 ## Local Development
 
 **Prerequisites:** Node.js 22+
