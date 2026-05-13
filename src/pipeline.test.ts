@@ -10,8 +10,21 @@ const mockGetProductHistory = getProductHistory as jest.MockedFunction<typeof ge
 
 const ASIN = 'B001E4KFG0';
 
+const SPAWN_SUCCESS = {
+  status: 0,
+  error: undefined,
+  output: [],
+  pid: 0,
+  signal: null,
+  stderr: Buffer.alloc(0),
+  stdout: Buffer.alloc(0),
+} as ReturnType<typeof spawnSync>;
+
 describe('pipeline.run', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSpawnSync.mockReturnValue(SPAWN_SUCCESS);
+  });
 
   it('returns false and sends Telegram alert on non-2xx HTTP error', async () => {
     mockGetProductHistory.mockRejectedValue(new Error('Keepa API error: HTTP 429'));
@@ -51,6 +64,7 @@ describe('pipeline.run', () => {
     await run(ASIN);
     const sentMsg = (mockSpawnSync.mock.calls[0] as [string, string[]])[1][1];
     expect(sentMsg.length).toBeLessThanOrEqual(120);
+    expect(sentMsg).toMatch(/^price-pulse:/);
   });
 
   it('prefixes the alert with "price-pulse:"', async () => {
@@ -58,6 +72,18 @@ describe('pipeline.run', () => {
     await run(ASIN);
     const sentMsg = (mockSpawnSync.mock.calls[0] as [string, string[]])[1][1];
     expect(sentMsg).toMatch(/^price-pulse:/);
+  });
+
+  it('logs to stderr when alert delivery fails', async () => {
+    mockSpawnSync.mockReturnValue({ ...SPAWN_SUCCESS, status: 1 });
+    mockGetProductHistory.mockRejectedValue(new Error('HTTP 503'));
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    await run(ASIN);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[price-pulse] alert delivery failed'),
+      expect.any(String),
+    );
+    consoleSpy.mockRestore();
   });
 
   it('returns true and does not send any alert on successful fetch', async () => {

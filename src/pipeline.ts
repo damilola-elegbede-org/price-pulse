@@ -5,7 +5,10 @@ const TELEGRAM_SEND_SCRIPT = process.env.TELEGRAM_SEND_SCRIPT
   ?? '/Users/daelegbe/BareClaude/clara/scripts/telegram-send.sh';
 
 function sendAlert(message: string): void {
-  spawnSync(TELEGRAM_SEND_SCRIPT, ['--raw', message.slice(0, 120)], { stdio: 'inherit' });
+  const result = spawnSync(TELEGRAM_SEND_SCRIPT, ['--raw', message.slice(0, 120)], { stdio: 'inherit' });
+  if (result.error || (result.status !== null && result.status !== 0)) {
+    console.error(`[price-pulse] alert delivery failed (status=${result.status ?? 'null'}):`, result.error?.message ?? '');
+  }
 }
 
 export async function run(asin: string): Promise<boolean> {
