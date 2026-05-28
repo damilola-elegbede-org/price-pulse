@@ -8,6 +8,8 @@ Amazon price tracker that ingests Keepa API history for a curated set of coffee 
 
 ## Architecture
 
+> **Target architecture (ENG-377/ENG-330).** The analysis → alert path is not yet wired. The current pipeline fetches price history from Keepa and logs the count; `analyzePrice` and the non-error alert dispatch are added in ENG-377 and ENG-330.
+
 ```mermaid
 flowchart LR
     env["ASIN env var"]
