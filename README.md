@@ -1,5 +1,9 @@
 # price-pulse
 
+[![CI](https://github.com/damilola-elegbede-org/price-pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/damilola-elegbede-org/price-pulse/actions/workflows/ci.yml)
+![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
 Amazon price tracker that ingests Keepa API history for a curated set of coffee ASINs, evaluates current price against configured thresholds, and fires Telegram alerts on drops.
 
 ## Architecture
