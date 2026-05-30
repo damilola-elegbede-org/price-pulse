@@ -141,26 +141,24 @@ describe('pipeline.run', () => {
 
   // ── DB + alert-decision integration ─────────────────────────────────────────
 
-  it('inserts price point and fires alert when price drops ≥10% from 7d avg', async () => {
-    mockGetProductHistory.mockResolvedValue([PRICE_POINT]); // $18.00
-    mockGet7dAvgCents.mockReturnValue(2000); // $20.00 avg → 90% threshold = $18.00 → price=$18.00 is NOT < $18.00
-    // $18.00 is not strictly less than $18.00, so no alert. Test at $17.99 instead.
-    const lowerPoint = { ...PRICE_POINT, priceAmazon: 1799 }; // $17.99, drops >10%
+  it('inserts price point and fires alert when price is below configured threshold', async () => {
+    const lowerPoint = { ...PRICE_POINT, priceAmazon: 1799 }; // $17.99 < $19.00 threshold
     mockGetProductHistory.mockResolvedValue([lowerPoint]);
+    mockGet7dAvgCents.mockReturnValue(2000); // $20.00 avg (display only)
 
-    const result = await run(ASIN, MOCK_DB);
+    const result = await run(ASIN, MOCK_DB, 1900);
     expect(result).toBe(true);
     expect(mockInsertPricePoint).toHaveBeenCalledWith(MOCK_DB, ASIN, 1799, null, null);
     expect(mockSpawnSync).toHaveBeenCalled();
     expect(mockRecordAlert).toHaveBeenCalledWith(MOCK_DB, ASIN, 1799);
   });
 
-  it('does not send alert when price is above 90% of 7d avg', async () => {
-    const highPoint = { ...PRICE_POINT, priceAmazon: 1950 }; // $19.50, only 2.5% drop
+  it('does not send alert when price is above configured threshold', async () => {
+    const highPoint = { ...PRICE_POINT, priceAmazon: 1950 }; // $19.50 > $18.00 threshold
     mockGetProductHistory.mockResolvedValue([highPoint]);
-    mockGet7dAvgCents.mockReturnValue(2000); // threshold = $18.00; $19.50 > $18.00 → no alert
+    mockGet7dAvgCents.mockReturnValue(2000);
 
-    await run(ASIN, MOCK_DB);
+    await run(ASIN, MOCK_DB, 1800);
     expect(mockSpawnSync).not.toHaveBeenCalled();
     expect(mockRecordAlert).not.toHaveBeenCalled();
   });
@@ -171,22 +169,25 @@ describe('pipeline.run', () => {
     mockGet7dAvgCents.mockReturnValue(2000);
     mockWasAlertedRecently.mockReturnValue(true);
 
-    await run(ASIN, MOCK_DB);
+    await run(ASIN, MOCK_DB, 2000);
     expect(mockSpawnSync).not.toHaveBeenCalled();
     expect(mockRecordAlert).not.toHaveBeenCalled();
   });
 
-  it('skips alert decision when no 7d avg is available', async () => {
+  it('computes 7d average before inserting price point (historical baseline)', async () => {
+    const callOrder: string[] = [];
+    mockGet7dAvgCents.mockImplementation(() => { callOrder.push('get7dAvg'); return null; });
+    mockInsertPricePoint.mockImplementation(() => { callOrder.push('insert'); });
     mockGetProductHistory.mockResolvedValue([PRICE_POINT]);
-    mockGet7dAvgCents.mockReturnValue(null);
+    mockWasAlertedRecently.mockReturnValue(true); // suppress alert path
 
-    await run(ASIN, MOCK_DB);
-    expect(mockSpawnSync).not.toHaveBeenCalled();
+    await run(ASIN, MOCK_DB, 2000);
+    expect(callOrder).toEqual(['get7dAvg', 'insert']);
   });
 
   it('does not insert price point when history is empty', async () => {
     mockGetProductHistory.mockResolvedValue([]);
-    await run(ASIN, MOCK_DB);
+    await run(ASIN, MOCK_DB, 2000);
     expect(mockInsertPricePoint).not.toHaveBeenCalled();
   });
 });
@@ -202,21 +203,36 @@ describe('pipeline.runAll', () => {
     delete process.env.TELEGRAM_SEND_SCRIPT;
   });
 
-  it('polls all tracked ASINs', async () => {
+  it('polls all tracked ASINs and returns true when all succeed', async () => {
     mockListAsins.mockReturnValue([
       { asin: 'B001', name: 'Item A', threshold_cents: 2000 },
       { asin: 'B002', name: 'Item B', threshold_cents: 3000 },
     ]);
     mockGetProductHistory.mockResolvedValue([]);
 
-    await runAll(MOCK_DB);
+    const ok = await runAll(MOCK_DB);
+    expect(ok).toBe(true);
     expect(mockGetProductHistory).toHaveBeenCalledTimes(2);
   });
 
-  it('logs and returns early when no ASINs are tracked', async () => {
+  it('returns false when at least one ASIN poll fails', async () => {
+    mockListAsins.mockReturnValue([
+      { asin: 'B001', name: 'Item A', threshold_cents: 2000 },
+      { asin: 'B002', name: 'Item B', threshold_cents: 3000 },
+    ]);
+    mockGetProductHistory
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error('Keepa 429'));
+
+    const ok = await runAll(MOCK_DB);
+    expect(ok).toBe(false);
+  });
+
+  it('logs and returns true when no ASINs are tracked', async () => {
     mockListAsins.mockReturnValue([]);
     const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    await runAll(MOCK_DB);
+    const ok = await runAll(MOCK_DB);
+    expect(ok).toBe(true);
     expect(mockGetProductHistory).not.toHaveBeenCalled();
     consoleSpy.mockRestore();
   });

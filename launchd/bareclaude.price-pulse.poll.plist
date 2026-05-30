@@ -7,14 +7,14 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/bin/node</string>
+    <string>/opt/homebrew/bin/node</string>
     <string>/Users/daelegbe/BareClaude/finn/repos/price-pulse/dist/pipeline.js</string>
   </array>
 
   <key>EnvironmentVariables</key>
   <dict>
     <key>DB_PATH</key>
-    <string>/Users/daelegbe/BareClaude/finn/repos/price-pulse/price-pulse.db</string>
+    <string>/Users/daelegbe/BareClaude/finn/.state/price-pulse.db</string>
     <key>TELEGRAM_SEND_SCRIPT</key>
     <string>/Users/daelegbe/BareClaude/finn/scripts/telegram-send.sh</string>
   </dict>

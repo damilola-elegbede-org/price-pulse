@@ -18,6 +18,7 @@ interface HistoryRow {
 export function openDb(path: string): DB {
   const db = new Database(path);
   db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
   db.exec(`
     CREATE TABLE IF NOT EXISTS asins (
       asin TEXT PRIMARY KEY,

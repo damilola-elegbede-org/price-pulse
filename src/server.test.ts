@@ -124,4 +124,108 @@ describe('POST /api/v1/price-alerts', () => {
     const { status } = await request(server, 'GET', '/unknown', undefined);
     expect(status).toBe(404);
   });
+
+  it('returns 400 when asin format is invalid (lowercase)', async () => {
+    const { status } = await request(server, 'POST', '/api/v1/price-alerts', {
+      asin: 'b001e4kfg0',
+      name: 'Coffee Beans',
+      threshold_cents: 2000,
+    });
+    expect(status).toBe(400);
+  });
+
+  it('returns 400 when asin is not 10 characters', async () => {
+    const { status } = await request(server, 'POST', '/api/v1/price-alerts', {
+      asin: 'B001',
+      name: 'Coffee Beans',
+      threshold_cents: 2000,
+    });
+    expect(status).toBe(400);
+  });
+
+  it('returns 400 when name exceeds 512 characters', async () => {
+    const { status } = await request(server, 'POST', '/api/v1/price-alerts', {
+      asin: 'B001E4KFG0',
+      name: 'x'.repeat(513),
+      threshold_cents: 2000,
+    });
+    expect(status).toBe(400);
+  });
+});
+
+describe('POST /api/v1/price-alerts — auth', () => {
+  let server: http.Server;
+  const db = {} as Database;
+
+  beforeEach((done: () => void) => {
+    jest.clearAllMocks();
+    process.env.PRICE_PULSE_API_TOKEN = 'test-secret-token';
+    server = createServer(db);
+    server.listen(0, '127.0.0.1', () => done());
+  });
+
+  afterEach((done: () => void) => {
+    delete process.env.PRICE_PULSE_API_TOKEN;
+    server.close(() => done());
+  });
+
+  it('returns 401 when Authorization header is missing', async () => {
+    const port = (server.address() as { port: number }).port;
+    const { status, data } = await new Promise<{ status: number; data: unknown }>((resolve, reject) => {
+      const raw = JSON.stringify({ asin: 'B001E4KFG0', name: 'Coffee', threshold_cents: 2000 });
+      const req = http.request(
+        { host: '127.0.0.1', port, method: 'POST', path: '/api/v1/price-alerts',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(raw) } },
+        res => {
+          let buf = '';
+          res.on('data', (c: Buffer) => { buf += c.toString(); });
+          res.on('end', () => resolve({ status: res.statusCode ?? 0, data: JSON.parse(buf) }));
+        },
+      );
+      req.on('error', reject);
+      req.end(raw);
+    });
+    expect(status).toBe(401);
+    expect((data as { ok: boolean }).ok).toBe(false);
+  });
+
+  it('returns 401 when Authorization header has wrong token', async () => {
+    const port = (server.address() as { port: number }).port;
+    const { status } = await new Promise<{ status: number; data: unknown }>((resolve, reject) => {
+      const raw = JSON.stringify({ asin: 'B001E4KFG0', name: 'Coffee', threshold_cents: 2000 });
+      const req = http.request(
+        { host: '127.0.0.1', port, method: 'POST', path: '/api/v1/price-alerts',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(raw),
+                     'Authorization': 'Bearer wrong-token' } },
+        res => {
+          let buf = '';
+          res.on('data', (c: Buffer) => { buf += c.toString(); });
+          res.on('end', () => resolve({ status: res.statusCode ?? 0, data: JSON.parse(buf) }));
+        },
+      );
+      req.on('error', reject);
+      req.end(raw);
+    });
+    expect(status).toBe(401);
+  });
+
+  it('returns 200 with correct Bearer token', async () => {
+    const port = (server.address() as { port: number }).port;
+    const { status } = await new Promise<{ status: number; data: unknown }>((resolve, reject) => {
+      const raw = JSON.stringify({ asin: 'B001E4KFG0', name: 'Coffee', threshold_cents: 2000 });
+      const req = http.request(
+        { host: '127.0.0.1', port, method: 'POST', path: '/api/v1/price-alerts',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(raw),
+                     'Authorization': 'Bearer test-secret-token' } },
+        res => {
+          let buf = '';
+          res.on('data', (c: Buffer) => { buf += c.toString(); });
+          res.on('end', () => resolve({ status: res.statusCode ?? 0, data: JSON.parse(buf) }));
+        },
+      );
+      req.on('error', reject);
+      req.end(raw);
+    });
+    expect(status).toBe(200);
+  });
 });
