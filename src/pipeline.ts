@@ -1,8 +1,17 @@
 import { spawnSync } from 'child_process';
 import { accessSync, constants } from 'fs';
+import type { Database } from 'better-sqlite3';
 import { getProductHistory } from './keepa/client';
+import { analyzePrice } from './price-analysis';
+import {
+  listAsins,
+  insertPricePoint,
+  get7dAvgCents,
+  wasAlertedRecently,
+  recordAlert,
+} from './db';
 
-function sendAlert(message: string): void {
+export function sendAlert(message: string): void {
   const script = process.env.TELEGRAM_SEND_SCRIPT;
   if (!script) {
     console.error('[price-pulse] alert not sent: TELEGRAM_SEND_SCRIPT env var is not set');
@@ -14,7 +23,7 @@ function sendAlert(message: string): void {
   }
 }
 
-export async function run(asin: string): Promise<boolean> {
+export async function run(asin: string, db?: Database): Promise<boolean> {
   let history;
   try {
     history = await getProductHistory(asin);
@@ -25,15 +34,43 @@ export async function run(asin: string): Promise<boolean> {
     return false;
   }
   console.log(`Fetched ${history.length} price points for ASIN ${asin}`);
+
+  if (db && history.length > 0) {
+    const latest = history[history.length - 1];
+    insertPricePoint(db, asin, latest.priceAmazon, latest.priceNew, latest.priceUsed);
+
+    const avg7d = get7dAvgCents(db, asin);
+    if (avg7d !== null) {
+      // Alert when price drops ≥10% below the 7-day rolling average.
+      // Pass 90% of avg as thresholdCents: analyzePrice fires when price < threshold.
+      const thresholdCents = Math.round(avg7d * 0.9);
+      const decision = analyzePrice([latest], thresholdCents);
+
+      if (decision.should_alert && !wasAlertedRecently(db, asin)) {
+        const priceDollars = (decision.current_price / 100).toFixed(2);
+        const avgDollars = (avg7d / 100).toFixed(2);
+        const drop = decision.drop_pct.toFixed(1);
+        sendAlert(`price-pulse: ${asin} dropped ${drop}% (now $${priceDollars}, 7d avg $${avgDollars})`);
+        recordAlert(db, asin, decision.current_price);
+      }
+    }
+  }
+
   return true;
 }
 
-if (require.main === module) {
-  const asin = process.env.ASIN;
-  if (!asin) {
-    console.error('ASIN environment variable is required');
-    process.exit(1);
+export async function runAll(db: Database): Promise<void> {
+  const asins = listAsins(db);
+  if (asins.length === 0) {
+    console.log('[price-pulse] no tracked ASINs');
+    return;
   }
+  for (const row of asins) {
+    await run(row.asin, db);
+  }
+}
+
+if (require.main === module) {
   const script = process.env.TELEGRAM_SEND_SCRIPT;
   if (!script) {
     console.error('TELEGRAM_SEND_SCRIPT environment variable is required');
@@ -45,9 +82,12 @@ if (require.main === module) {
     console.error(`TELEGRAM_SEND_SCRIPT=${script} is not executable`);
     process.exit(1);
   }
-  run(asin).then(ok => {
-    if (!ok) process.exit(1);
-  }).catch(err => {
+
+  const { openDb } = require('./db') as typeof import('./db');
+  const dbPath = process.env.DB_PATH ?? 'price-pulse.db';
+  const db = openDb(dbPath);
+
+  runAll(db).catch(err => {
     console.error('Unexpected pipeline error:', err);
     process.exit(1);
   });
