@@ -7,8 +7,8 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>/opt/homebrew/bin/node</string>
-    <string>/Users/daelegbe/BareClaude/finn/repos/price-pulse/dist/pipeline.js</string>
+    <string>/bin/bash</string>
+    <string>/Users/daelegbe/BareClaude/finn/scripts/price-pulse-run.sh</string>
   </array>
 
   <key>EnvironmentVariables</key>
