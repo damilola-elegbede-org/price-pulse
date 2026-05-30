@@ -31,7 +31,7 @@ flowchart LR
     subgraph analysis["price-analysis.ts"]
         a1["latest PriceDataPoint"]
         a2["bestPrice\nAmazon→New→Used"]
-        a3["compare vs\n7d avg × 0.9"]
+        a3["compare vs\nthreshold_cents"]
         a4["AlertDecision"]
         a1 --> a2 --> a3 --> a4
     end
@@ -111,23 +111,21 @@ Fetched 4821 price points for ASIN B001E4KFG0
 | Variable | Required | Purpose |
 |---|---|---|
 | `DB_PATH` | Yes | Path to the SQLite database file (default: `price-pulse.db`) |
-| `TELEGRAM_SEND_SCRIPT` | Yes | Path to an executable that accepts `--raw <message>` for alert delivery |
+| `TELEGRAM_SEND_SCRIPT` | Yes | Path to an executable that accepts `--raw <message>` for alert delivery; must be under `/Users/daelegbe/BareClaude/` |
 | `KEEPA_API_KEY` | Yes | Keepa API key |
+| `PRICE_PULSE_API_TOKEN` | Yes (HTTP server) | Shared secret for `Authorization: Bearer <token>` requests to the REST API |
 
 `TELEGRAM_SEND_SCRIPT` is validated as executable at startup. The pipeline exits 1 if it is unset or not executable. ASINs to track are managed via the REST API (see [REST API](#rest-api)) rather than an env var.
 
 ## REST API
 
-The HTTP server (`createServer(db)` in `src/server.ts`) exposes one endpoint for registering products. Start it by passing an `openDb()` instance:
+The HTTP server (`createServer(db)` in `src/server.ts`) exposes one endpoint for registering products. The production entrypoint (`src/server-main.ts`) binds to `127.0.0.1` and requires `PRICE_PULSE_API_TOKEN`:
 
-```ts
-import { openDb } from './db';
-import { createServer } from './server';
-
-const db = openDb(process.env.DB_PATH ?? 'price-pulse.db');
-const server = createServer(db);
-server.listen(3000);
+```bash
+PRICE_PULSE_API_TOKEN=<secret> DB_PATH=/path/to/price-pulse.db node dist/server-main.js
 ```
+
+All requests must include `Authorization: Bearer <PRICE_PULSE_API_TOKEN>`.
 
 ### `POST /api/v1/price-alerts`
 
@@ -141,16 +139,17 @@ Register a new ASIN for price tracking, or update the threshold for an existing 
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `asin` | string | Yes | Must be non-blank |
-| `name` | string | Yes | Human-readable product name |
-| `threshold_cents` | number | Yes | Alert threshold in cents; must be > 0 |
+| `asin` | string | Yes | Exactly 10 uppercase alphanumeric characters (`A-Z`, `0-9`) |
+| `name` | string | Yes | Human-readable product name; max 512 characters |
+| `threshold_cents` | number | Yes | Alert price in cents; alert fires when current price drops below this value; must be > 0 |
 
 **Responses**
 
 | Status | Body | When |
 |---|---|---|
 | `200` | `{ "ok": true, "asin": "<asin>" }` | ASIN registered or updated |
-| `400` | `{ "ok": false, "error": "<reason>" }` | Missing fields, blank ASIN, non-positive threshold, or invalid JSON |
+| `400` | `{ "ok": false, "error": "<reason>" }` | Missing fields, invalid ASIN format, name too long, non-positive threshold, or invalid JSON |
+| `401` | `{ "ok": false, "error": "unauthorized" }` | Missing or incorrect `Authorization: Bearer <token>` header |
 | `404` | `{ "ok": false, "error": "not found" }` | Any other route |
 
 ## Development

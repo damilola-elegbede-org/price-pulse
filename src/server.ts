@@ -28,12 +28,9 @@ function send(res: http.ServerResponse, status: number, payload: unknown): void 
 export function createServer(db: Database): http.Server {
   return http.createServer(async (req, res) => {
     const requiredToken = process.env.PRICE_PULSE_API_TOKEN;
-    if (requiredToken) {
-      const auth = req.headers['authorization'];
-      if (auth !== `Bearer ${requiredToken}`) {
-        send(res, 401, { ok: false, error: 'unauthorized' });
-        return;
-      }
+    if (!requiredToken || req.headers['authorization'] !== `Bearer ${requiredToken}`) {
+      send(res, 401, { ok: false, error: 'unauthorized' });
+      return;
     }
 
     if (req.method === 'POST' && req.url === '/api/v1/price-alerts') {
