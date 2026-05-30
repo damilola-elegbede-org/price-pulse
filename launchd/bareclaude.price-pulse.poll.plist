@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>bareclaude.price-pulse.poll</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/daelegbe/BareClaude/finn/scripts/price-pulse-run.sh</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>DB_PATH</key>
+    <string>/Users/daelegbe/BareClaude/finn/.state/price-pulse.db</string>
+    <key>TELEGRAM_SEND_SCRIPT</key>
+    <string>/Users/daelegbe/BareClaude/finn/scripts/telegram-send.sh</string>
+  </dict>
+
+  <!-- Daily at 07:00 Mountain Time -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>7</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/daelegbe/BareClaude/finn/.state/price-pulse-poll.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/daelegbe/BareClaude/finn/.state/price-pulse-poll.log</string>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
