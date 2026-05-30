@@ -8,17 +8,16 @@ Amazon price tracker that ingests Keepa API history for a curated set of coffee 
 
 ## Architecture
 
-> **Target architecture (ENG-377/ENG-330).** The analysis → alert path is not yet wired. The current pipeline fetches price history from Keepa and logs the count; `analyzePrice` and the non-error alert dispatch are added in ENG-377 and ENG-330.
-
 ```mermaid
 flowchart LR
-    env["ASIN env var"]
-    env --> pipeline
+    db["SQLite DB\n(asins table)"]
+    db -->|"listAsins()"| pipeline
 
     subgraph pipeline["pipeline.ts — daily runner"]
-        p1["validate env\n+ startup checks"]
-        p2["run(asin)"]
-        p1 --> p2
+        p1["openDb(DB_PATH)"]
+        p2["listAsins(db)"]
+        p3["run(asin, db)\nper ASIN"]
+        p1 --> p2 --> p3
     end
 
     subgraph keepa["keepa/client.ts"]
@@ -32,15 +31,23 @@ flowchart LR
     subgraph analysis["price-analysis.ts"]
         a1["latest PriceDataPoint"]
         a2["bestPrice\nAmazon→New→Used"]
-        a3["compare vs\nthresholdCents"]
+        a3["compare vs\n7d avg × 0.9"]
         a4["AlertDecision"]
         a1 --> a2 --> a3 --> a4
     end
 
-    pipeline -->|asin| keepa
+    p3 -->|asin| keepa
     keepa -->|"PriceHistory[]"| analysis
     analysis -->|"should_alert=true"| alert["sendAlert()\nspawnSync\nTELEGRAM_SEND_SCRIPT"]
     alert --> telegram["Telegram DM"]
+
+    subgraph server["server.ts — HTTP server"]
+        s1["POST /api/v1/price-alerts"]
+        s2["upsertAsin(db)"]
+        s1 --> s2
+    end
+
+    server -->|"registers ASINs"| db
 ```
 
 ## Tech stack
@@ -75,7 +82,7 @@ Create a `.env` file (not committed) with the required environment variables:
 
 ```ini
 KEEPA_API_KEY=your_key_here
-ASIN=B001E4KFG0
+DB_PATH=/path/to/price-pulse.db
 TELEGRAM_SEND_SCRIPT=/path/to/telegram-send.sh
 ```
 
@@ -83,7 +90,7 @@ TELEGRAM_SEND_SCRIPT=/path/to/telegram-send.sh
 
 ```bash
 npm run build
-ASIN=B001E4KFG0 TELEGRAM_SEND_SCRIPT=/path/to/send.sh node dist/pipeline.js
+DB_PATH=/path/to/price-pulse.db TELEGRAM_SEND_SCRIPT=/path/to/send.sh node dist/pipeline.js
 ```
 
 **Exit codes**
@@ -103,11 +110,48 @@ Fetched 4821 price points for ASIN B001E4KFG0
 
 | Variable | Required | Purpose |
 |---|---|---|
+| `DB_PATH` | Yes | Path to the SQLite database file (default: `price-pulse.db`) |
+| `TELEGRAM_SEND_SCRIPT` | Yes | Path to an executable that accepts `--raw <message>` for alert delivery |
 | `KEEPA_API_KEY` | Yes | Keepa API key |
-| `ASIN` | Yes (CLI) | Amazon ASIN to track |
-| `TELEGRAM_SEND_SCRIPT` | Yes (CLI) | Path to an executable that accepts `--raw <message>` for alert delivery |
 
-`TELEGRAM_SEND_SCRIPT` is validated as executable at startup. The pipeline exits 1 if it is unset or not executable.
+`TELEGRAM_SEND_SCRIPT` is validated as executable at startup. The pipeline exits 1 if it is unset or not executable. ASINs to track are managed via the REST API (see [REST API](#rest-api)) rather than an env var.
+
+## REST API
+
+The HTTP server (`createServer(db)` in `src/server.ts`) exposes one endpoint for registering products. Start it by passing an `openDb()` instance:
+
+```ts
+import { openDb } from './db';
+import { createServer } from './server';
+
+const db = openDb(process.env.DB_PATH ?? 'price-pulse.db');
+const server = createServer(db);
+server.listen(3000);
+```
+
+### `POST /api/v1/price-alerts`
+
+Register a new ASIN for price tracking, or update the threshold for an existing one.
+
+**Request body**
+
+```json
+{ "asin": "B001E4KFG0", "name": "Coffee Beans 5lb", "threshold_cents": 2000 }
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `asin` | string | Yes | Must be non-blank |
+| `name` | string | Yes | Human-readable product name |
+| `threshold_cents` | number | Yes | Alert threshold in cents; must be > 0 |
+
+**Responses**
+
+| Status | Body | When |
+|---|---|---|
+| `200` | `{ "ok": true, "asin": "<asin>" }` | ASIN registered or updated |
+| `400` | `{ "ok": false, "error": "<reason>" }` | Missing fields, blank ASIN, non-positive threshold, or invalid JSON |
+| `404` | `{ "ok": false, "error": "not found" }` | Any other route |
 
 ## Development
 
@@ -134,7 +178,7 @@ Tests live alongside source in `src/`. Each module ships its own `.test.ts`:
 | ENG-265 | Keepa API client + token-bucket rate limiting | 🔄 In review |
 | ENG-377 | Price-comparison and alert-decision engine | 🔄 In review |
 | ENG-462 | Keepa fetch-failure alerting in daily pipeline | 🔄 In review |
-| ENG-254 | MVP sprint (storage, backfill, multi-ASIN) | 📋 Planned |
+| ENG-254 | MVP sprint (storage, backfill, multi-ASIN) | 🔄 In review |
 
 See [docs/architecture.md](docs/architecture.md) for a component-level deep dive.
 
