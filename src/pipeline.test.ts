@@ -110,3 +110,99 @@ describe('pipeline.run', () => {
     expect(mockSpawnSync).not.toHaveBeenCalled();
   });
 });
+
+describe('pipeline.run — price-drop alert', () => {
+  const THRESHOLD_CENTS = 2000; // $20.00
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSpawnSync.mockReturnValue(SPAWN_SUCCESS);
+    process.env.TELEGRAM_SEND_SCRIPT = 'mock-telegram-send.sh';
+    process.env.PRICE_THRESHOLD_CENTS = String(THRESHOLD_CENTS);
+    process.env.PRODUCT_NAME = 'Test Coffee';
+  });
+
+  afterEach(() => {
+    delete process.env.TELEGRAM_SEND_SCRIPT;
+    delete process.env.PRICE_THRESHOLD_CENTS;
+    delete process.env.PRODUCT_NAME;
+    delete process.env.PRICE_DROP_PCT;
+  });
+
+  it('sends Telegram alert when Keepa price is below configured threshold', async () => {
+    // $15.00 = 1500 cents < $20.00 = 2000 cents → should alert
+    mockGetProductHistory.mockResolvedValue([
+      { timestamp: new Date(), priceAmazon: 1500, priceNew: null, priceUsed: null },
+    ]);
+    const result = await run(ASIN);
+    expect(result).toBe(true);
+    expect(mockSpawnSync).toHaveBeenCalledTimes(1);
+    const [calledScript, calledArgs] = mockSpawnSync.mock.calls[0] as [string, string[]];
+    expect(calledScript).toBe('mock-telegram-send.sh');
+    const message = calledArgs[0];
+    expect(message).toContain('Test Coffee');
+    expect(message).toContain('$15.00');
+    expect(message).toContain('$20.00');
+    expect(message).toContain('25.0%');
+    expect(message).toContain(`https://www.amazon.com/dp/${ASIN}`);
+  });
+
+  it('does not send Telegram alert when Keepa price is above configured threshold', async () => {
+    // $25.00 = 2500 cents > $20.00 = 2000 cents → no alert
+    mockGetProductHistory.mockResolvedValue([
+      { timestamp: new Date(), priceAmazon: 2500, priceNew: null, priceUsed: null },
+    ]);
+    const result = await run(ASIN);
+    expect(result).toBe(true);
+    expect(mockSpawnSync).not.toHaveBeenCalled();
+  });
+
+  it('uses dynamic threshold when PRICE_THRESHOLD_CENTS is not set', async () => {
+    delete process.env.PRICE_THRESHOLD_CENTS;
+    // Penultimate: $20.00 = 2000 cents. Dynamic threshold = 2000 * 0.9 = $18.00 = 1800 cents.
+    // Latest: $15.00 = 1500 cents < 1800 → should alert
+    mockGetProductHistory.mockResolvedValue([
+      { timestamp: new Date(), priceAmazon: 2000, priceNew: null, priceUsed: null },
+      { timestamp: new Date(), priceAmazon: 1500, priceNew: null, priceUsed: null },
+    ]);
+    const result = await run(ASIN);
+    expect(result).toBe(true);
+    expect(mockSpawnSync).toHaveBeenCalledTimes(1);
+    const message = (mockSpawnSync.mock.calls[0] as [string, string[]])[1][0];
+    expect(message).toContain('$15.00');
+  });
+
+  it('does not alert when dynamic threshold cannot be determined (single history point)', async () => {
+    delete process.env.PRICE_THRESHOLD_CENTS;
+    mockGetProductHistory.mockResolvedValue([
+      { timestamp: new Date(), priceAmazon: 500, priceNew: null, priceUsed: null },
+    ]);
+    const result = await run(ASIN);
+    expect(result).toBe(true);
+    expect(mockSpawnSync).not.toHaveBeenCalled();
+  });
+
+  it('falls back to ASIN as product name when PRODUCT_NAME is not set', async () => {
+    delete process.env.PRODUCT_NAME;
+    mockGetProductHistory.mockResolvedValue([
+      { timestamp: new Date(), priceAmazon: 1500, priceNew: null, priceUsed: null },
+    ]);
+    await run(ASIN);
+    const message = (mockSpawnSync.mock.calls[0] as [string, string[]])[1][0];
+    expect(message).toContain(ASIN);
+  });
+
+  it('logs to stderr when price alert delivery fails', async () => {
+    mockSpawnSync.mockReturnValue({ ...SPAWN_SUCCESS, status: 1 });
+    mockGetProductHistory.mockResolvedValue([
+      { timestamp: new Date(), priceAmazon: 1500, priceNew: null, priceUsed: null },
+    ]);
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    await run(ASIN);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[price-pulse] price alert delivery failed'),
+      expect.any(String),
+    );
+    consoleSpy.mockRestore();
+  });
+});
