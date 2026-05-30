@@ -160,7 +160,9 @@ describe('pipeline.run — price-drop alert', () => {
   it('uses dynamic threshold when PRICE_THRESHOLD_CENTS is not set', async () => {
     delete process.env.PRICE_THRESHOLD_CENTS;
     // Penultimate: $20.00 = 2000 cents. Dynamic threshold = 2000 * 0.9 = $18.00 = 1800 cents.
-    // Latest: $15.00 = 1500 cents < 1800 → should alert
+    // Latest: $15.00 = 1500 cents < 1800 → should alert.
+    // "was" must show $20.00 (the baseline, not the derived threshold $18.00).
+    // drop % must be (2000 - 1500) / 2000 = 25%, not 16.7%.
     mockGetProductHistory.mockResolvedValue([
       { timestamp: new Date(), priceAmazon: 2000, priceNew: null, priceUsed: null },
       { timestamp: new Date(), priceAmazon: 1500, priceNew: null, priceUsed: null },
@@ -170,6 +172,20 @@ describe('pipeline.run — price-drop alert', () => {
     expect(mockSpawnSync).toHaveBeenCalledTimes(1);
     const message = (mockSpawnSync.mock.calls[0] as [string, string[]])[1][0];
     expect(message).toContain('$15.00');
+    expect(message).toContain('$20.00');
+    expect(message).toContain('25.0%');
+  });
+
+  it('does not alert when PRICE_DROP_PCT is not a finite positive number', async () => {
+    delete process.env.PRICE_THRESHOLD_CENTS;
+    process.env.PRICE_DROP_PCT = 'abc';
+    mockGetProductHistory.mockResolvedValue([
+      { timestamp: new Date(), priceAmazon: 2000, priceNew: null, priceUsed: null },
+      { timestamp: new Date(), priceAmazon: 1500, priceNew: null, priceUsed: null },
+    ]);
+    const result = await run(ASIN);
+    expect(result).toBe(true);
+    expect(mockSpawnSync).not.toHaveBeenCalled();
   });
 
   it('does not alert when dynamic threshold cannot be determined (single history point)', async () => {
