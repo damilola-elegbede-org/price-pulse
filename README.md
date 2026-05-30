@@ -8,7 +8,7 @@ Amazon price tracker that ingests Keepa API history for a curated set of coffee 
 
 ## Architecture
 
-> **Target architecture (ENG-377/ENG-330).** The analysis → alert path is not yet wired. The current pipeline fetches price history from Keepa and logs the count; `analyzePrice` and the non-error alert dispatch are added in ENG-377 and ENG-330.
+> Architecture as implemented.
 
 ```mermaid
 flowchart LR
@@ -101,13 +101,18 @@ Fetched 4821 price points for ASIN B001E4KFG0
 
 ## Configuration
 
-| Variable | Required | Purpose |
-|---|---|---|
-| `KEEPA_API_KEY` | Yes | Keepa API key |
-| `ASIN` | Yes (CLI) | Amazon ASIN to track |
-| `TELEGRAM_SEND_SCRIPT` | Yes (CLI) | Path to an executable that accepts `--raw <message>` for alert delivery |
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `KEEPA_API_KEY` | Yes | — | Keepa API key |
+| `ASIN` | Yes (CLI) | — | Amazon ASIN to track |
+| `TELEGRAM_SEND_SCRIPT` | Yes (CLI) | — | Path to an executable that accepts `--raw <message>` for alert delivery |
+| `PRODUCT_NAME` | No | ASIN | Human-readable product name shown in Telegram alerts |
+| `PRICE_THRESHOLD_CENTS` | No | — | Absolute alert threshold in cents; takes priority over `PRICE_DROP_PCT` |
+| `PRICE_DROP_PCT` | No | `10` | Relative threshold: alert when latest price drops ≥ this % below the previous observation; used only when `PRICE_THRESHOLD_CENTS` is unset |
 
 `TELEGRAM_SEND_SCRIPT` is validated as executable at startup. The pipeline exits 1 if it is unset or not executable.
+
+`PRICE_THRESHOLD_CENTS` and `PRICE_DROP_PCT` are mutually exclusive — when `PRICE_THRESHOLD_CENTS` is set, the absolute threshold takes priority and `PRICE_DROP_PCT` is ignored.
 
 ## Development
 

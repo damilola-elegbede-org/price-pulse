@@ -1,6 +1,7 @@
 import { spawnSync } from 'child_process';
 import { accessSync, constants } from 'fs';
 import { getProductHistory } from './keepa/client';
+import { analyzePrice, AlertDecision, PriceDataPoint } from './price-analysis';
 
 function sendAlert(message: string): void {
   const script = process.env.TELEGRAM_SEND_SCRIPT;
@@ -14,6 +15,46 @@ function sendAlert(message: string): void {
   }
 }
 
+// Resolve the price threshold in cents used to decide whether to fire an alert.
+// Priority: PRICE_THRESHOLD_CENTS (absolute) → dynamic (PRICE_DROP_PCT% below penultimate price).
+// Returns threshold=0 when a threshold cannot be determined (no alert fired).
+// reference is the human-visible "was" price: equals threshold for absolute, baseline for dynamic.
+function resolveThresholdCents(history: PriceDataPoint[]): { threshold: number; reference: number } {
+  const configured = process.env.PRICE_THRESHOLD_CENTS;
+  if (configured) {
+    const cents = parseInt(configured, 10);
+    if (Number.isFinite(cents) && cents > 0) return { threshold: cents, reference: cents };
+  }
+  // Dynamic: fire when latest price drops ≥ PRICE_DROP_PCT% below the penultimate observation.
+  // Requires at least two history points to establish a baseline.
+  if (history.length < 2) return { threshold: 0, reference: 0 };
+  const dropPct = parseFloat(process.env.PRICE_DROP_PCT ?? '10');
+  if (!Number.isFinite(dropPct) || dropPct <= 0) return { threshold: 0, reference: 0 };
+  const penultimate = history[history.length - 2];
+  const base = penultimate.priceAmazon ?? penultimate.priceNew ?? penultimate.priceUsed;
+  if (base === null || base <= 0) return { threshold: 0, reference: 0 };
+  return { threshold: Math.round(base * (1 - dropPct / 100)), reference: base };
+}
+
+// reference: the human-visible "was" price (baseline for dynamic threshold, equals threshold for absolute).
+function dispatchPriceAlert(asin: string, decision: AlertDecision, reference: number): void {
+  const script = process.env.TELEGRAM_SEND_SCRIPT;
+  if (!script) {
+    console.error('[price-pulse] price alert not sent: TELEGRAM_SEND_SCRIPT env var is not set');
+    return;
+  }
+  const name = process.env.PRODUCT_NAME ?? asin;
+  const current = (decision.current_price / 100).toFixed(2);
+  const was = (reference / 100).toFixed(2);
+  const pct = ((reference - decision.current_price) / reference * 100).toFixed(1);
+  const url = `https://www.amazon.com/dp/${asin}`;
+  const message = `price-pulse: ${name} dropped to $${current} (was $${was}, down ${pct}%) ${url}`;
+  const result = spawnSync(script, [message], { stdio: 'inherit' });
+  if (result.error || (result.status !== null && result.status !== 0)) {
+    console.error(`[price-pulse] price alert delivery failed (status=${result.status ?? 'null'}):`, result.error?.message ?? '');
+  }
+}
+
 export async function run(asin: string): Promise<boolean> {
   let history;
   try {
@@ -24,6 +65,15 @@ export async function run(asin: string): Promise<boolean> {
     sendAlert('price-pulse: Keepa fetch failed — see pipeline logs');
     return false;
   }
+
+  const { threshold: thresholdCents, reference } = resolveThresholdCents(history);
+  if (thresholdCents > 0) {
+    const decision = analyzePrice(history, thresholdCents);
+    if (decision.should_alert) {
+      dispatchPriceAlert(asin, decision, reference);
+    }
+  }
+
   console.log(`Fetched ${history.length} price points for ASIN ${asin}`);
   return true;
 }
