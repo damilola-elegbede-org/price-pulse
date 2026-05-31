@@ -43,6 +43,34 @@ flowchart LR
     alert --> telegram["Telegram DM"]
 ```
 
+## Database schema
+
+price-pulse uses SQLite (via `better-sqlite3`) for local persistence. The schema lives in `db/migrations/001_init.sql` and is applied idempotently by `src/db.ts` on every `openDb()` call.
+
+```
+price_history
+  id         INTEGER PK AUTOINCREMENT
+  asin       TEXT NOT NULL
+  timestamp  INTEGER NOT NULL  -- Unix epoch seconds (UTC)
+  price      INTEGER NOT NULL  -- USD cents
+  currency   TEXT NOT NULL DEFAULT 'USD'
+  INDEX (asin, timestamp)
+
+alert_config
+  asin       TEXT PRIMARY KEY
+  threshold  INTEGER NOT NULL  -- USD cents; alert when price drops below this
+  enabled    INTEGER NOT NULL DEFAULT 1  -- 0=off, 1=on
+
+alert_log
+  id             INTEGER PK AUTOINCREMENT
+  asin           TEXT NOT NULL
+  alert_ts       INTEGER NOT NULL  -- Unix epoch seconds (UTC)
+  price_at_alert INTEGER NOT NULL  -- USD cents at time of alert
+  INDEX (asin, alert_ts)
+```
+
+All monetary values are stored as **USD cents** (integer), matching the convention used throughout the pipeline and price-analysis modules. Timestamps are Unix epoch seconds.
+
 ## Tech stack
 
 | Layer | Choice |
@@ -134,6 +162,7 @@ Tests live alongside source in `src/`. Each module ships its own `.test.ts`:
 | ENG-265 | Keepa API client + token-bucket rate limiting | 🔄 In review |
 | ENG-377 | Price-comparison and alert-decision engine | 🔄 In review |
 | ENG-462 | Keepa fetch-failure alerting in daily pipeline | 🔄 In review |
+| ENG-570 | SQLite price-history and alert-state persistence schema | 🔄 In review |
 | ENG-254 | MVP sprint (storage, backfill, multi-ASIN) | 📋 Planned |
 
 See [docs/architecture.md](docs/architecture.md) for a component-level deep dive.
