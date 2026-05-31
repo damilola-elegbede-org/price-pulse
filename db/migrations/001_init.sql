@@ -24,5 +24,3 @@ CREATE TABLE IF NOT EXISTS alert_log (
   UNIQUE (asin, alert_ts),
   FOREIGN KEY (asin) REFERENCES alert_config(asin)
 );
-
-CREATE INDEX IF NOT EXISTS idx_alert_log_asin_ts ON alert_log (asin, alert_ts);

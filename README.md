@@ -54,7 +54,7 @@ price_history
   timestamp  INTEGER NOT NULL  -- Unix epoch seconds (UTC)
   price      INTEGER NOT NULL  -- USD cents
   currency   TEXT NOT NULL DEFAULT 'USD'
-  INDEX (asin, timestamp)
+  UNIQUE (asin, timestamp)
 
 alert_config
   asin       TEXT PRIMARY KEY
@@ -66,7 +66,8 @@ alert_log
   asin           TEXT NOT NULL
   alert_ts       INTEGER NOT NULL  -- Unix epoch seconds (UTC)
   price_at_alert INTEGER NOT NULL  -- USD cents at time of alert
-  INDEX (asin, alert_ts)
+  UNIQUE (asin, alert_ts)
+  FOREIGN KEY (asin) REFERENCES alert_config(asin)
 ```
 
 All monetary values are stored as **USD cents** (integer), matching the convention used throughout the pipeline and price-analysis modules. Timestamps are Unix epoch seconds.
