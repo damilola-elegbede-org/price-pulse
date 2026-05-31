@@ -6,10 +6,9 @@ CREATE TABLE IF NOT EXISTS price_history (
   asin      TEXT    NOT NULL,
   timestamp INTEGER NOT NULL, -- Unix epoch seconds (UTC)
   price     INTEGER NOT NULL, -- USD cents
-  currency  TEXT    NOT NULL DEFAULT 'USD'
+  currency  TEXT    NOT NULL DEFAULT 'USD',
+  UNIQUE (asin, timestamp)
 );
-
-CREATE INDEX IF NOT EXISTS idx_price_history_asin_ts ON price_history (asin, timestamp);
 
 CREATE TABLE IF NOT EXISTS alert_config (
   asin      TEXT    PRIMARY KEY,
@@ -21,7 +20,9 @@ CREATE TABLE IF NOT EXISTS alert_log (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   asin           TEXT    NOT NULL,
   alert_ts       INTEGER NOT NULL, -- Unix epoch seconds (UTC)
-  price_at_alert INTEGER NOT NULL  -- USD cents
+  price_at_alert INTEGER NOT NULL, -- USD cents
+  UNIQUE (asin, alert_ts),
+  FOREIGN KEY (asin) REFERENCES alert_config(asin)
 );
 
 CREATE INDEX IF NOT EXISTS idx_alert_log_asin_ts ON alert_log (asin, alert_ts);
