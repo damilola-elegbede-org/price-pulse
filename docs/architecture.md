@@ -126,9 +126,42 @@ Each module is tested in isolation. External dependencies are mocked at the modu
 - `price-analysis.test.ts` — pure function; no mocks needed.
 - `pipeline.test.ts` — `child_process.spawnSync` and `./keepa/client.getProductHistory` are mocked via `jest.mock()`.
 
-## Planned: storage layer (ENG-254)
+## Storage layer
 
-The MVP sprint will introduce a persistence layer between ingestion and analysis. The pipeline will write `PriceHistory[]` to SQLite after each Keepa fetch, enabling:
+### Shipped in ENG-570
+
+`db/migrations/001_init.sql` and `src/db.ts` landed the SQLite persistence layer:
+
+- **Schema:** three tables — `price_history`, `alert_config`, `alert_log` — with `UNIQUE` constraints on `(asin, timestamp)` and `(asin, alert_ts)` for idempotent retries.
+- **Module:** `src/db.ts` exports `openDb`, `insertPriceHistory`, `getPriceHistory`, `upsertAlertConfig`, `getAlertConfig`, `insertAlertLog`, `getRecentAlerts`. See the `src/db.ts` component reference below.
+
+### Planned in ENG-254
+
+Pipeline integration — wiring `insertPriceHistory` calls into `pipeline.run()` so every Keepa fetch is persisted, enabling:
 - Multi-ASIN tracking in a single daily run
 - Historical trend analysis across pipeline runs
 - Smarter threshold auto-adjustment based on 30/90-day price distributions
+
+---
+
+### `src/db.ts`
+
+**`openDb(filePath)`** — opens (or creates) a SQLite database and applies the initial schema migration.
+
+- `filePath` is either `':memory:'` (tests) or an absolute path to the database file. The conventional production path is driven by an env var (`DB_PATH`) set by the caller — not hardcoded in this module. The ENG-254 pipeline integration will document the default.
+- File-based databases are hardened to `0o600` (owner read/write only) immediately after creation.
+- Enables WAL journal mode and FK enforcement on every connection.
+- Migration is idempotent (`CREATE TABLE IF NOT EXISTS`) — safe to call on an existing database.
+
+**Exported CRUD functions** — all monetary values (`price`, `threshold`, `priceAtAlert`) are **USD cents**. `timestamp` / `alert_ts` are **Unix epoch seconds (UTC)**.
+
+| Function | Description |
+|---|---|
+| `insertPriceHistory(db, asin, timestamp, price, currency?)` | Writes a price point; silently no-ops on duplicate `(asin, timestamp)` |
+| `getPriceHistory(db, asin, sinceTs?)` | Returns rows for an ASIN, ascending by timestamp. `sinceTs` bounds the query — pass a 30/90-day epoch to avoid loading full history |
+| `upsertAlertConfig(db, asin, threshold, enabled?)` | Creates or updates the alert config for an ASIN |
+| `getAlertConfig(db, asin)` | Returns the config row, or `undefined` if the ASIN is not configured |
+| `insertAlertLog(db, asin, alertTs, priceAtAlert)` | Logs a fired alert; silently no-ops on duplicate `(asin, alert_ts)` |
+| `getRecentAlerts(db, asin, sinceTs)` | Returns alert log rows at or after `sinceTs`, descending — use for dedup before re-firing |
+
+**FK constraint:** `alert_log.asin` references `alert_config.asin`. Insert into `alert_log` requires a matching `alert_config` row.
