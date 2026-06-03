@@ -10,10 +10,19 @@
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-vm-modules node_modules/.bin/jest --coverage"
   },
-  "keywords": ["amazon", "price-tracker", "keepa", "typescript"],
+  "keywords": [
+    "amazon",
+    "price-tracker",
+    "keepa",
+    "typescript"
+  ],
   "license": "MIT",
+  "dependencies": {
+    "js-yaml": "^4.2.0"
+  },
   "devDependencies": {
     "@types/jest": "^29.5.14",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.0",
@@ -22,8 +31,13 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
-    "testMatch": ["**/src/**/*.test.ts"],
-    "collectCoverageFrom": ["src/keepa/client.ts"],
+    "testMatch": [
+      "**/src/**/*.test.ts"
+    ],
+    "collectCoverageFrom": [
+      "src/keepa/client.ts",
+      "src/config/products.ts"
+    ],
     "coverageThreshold": {
       "global": {
         "lines": 80,
