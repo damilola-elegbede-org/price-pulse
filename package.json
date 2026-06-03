@@ -35,7 +35,8 @@
       "**/src/**/*.test.ts"
     ],
     "collectCoverageFrom": [
-      "src/keepa/client.ts"
+      "src/keepa/client.ts",
+      "src/config/products.ts"
     ],
     "coverageThreshold": {
       "global": {
