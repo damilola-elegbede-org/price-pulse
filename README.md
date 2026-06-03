@@ -108,10 +108,11 @@ The curated set of tracked products lives in `config/products.yaml`. Each entry 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | Yes | Human-readable label used in alerts and logs |
-| `asin` | string | Yes | Amazon Standard Identification Number (10 chars) |
-| `keepa_product_id` | integer \| null | No | Keepa internal ID; populated on first successful fetch |
+| `asin` | string | Yes | Amazon Standard Identification Number (10 chars, `[A-Z0-9]{10}`) |
 | `alert_threshold_usd` | number | Yes | Alert fires when price drops below this value (USD, e.g. `12.99`) |
 | `enabled` | boolean | Yes | Set `false` to suspend tracking without removing the product |
+
+> **Note:** `keepa_product_id` is pipeline-managed state and is **not** stored in this file. It lives in the `alert_config` table in the SQLite database (ENG-570).
 
 All monetary values in the YAML are **USD**. The pipeline converts to **cents** (×100, integer) before passing to `analyzePrice` and the `alert_config` table (matching the convention used throughout `src/` and the SQLite schema).
 
