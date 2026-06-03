@@ -41,8 +41,6 @@ live('Price Pulse E2E smoke — live Keepa API', () => {
         if (v !== null) {
           expect(typeof v).toBe('number');
           expect(v).toBeGreaterThan(0);
-        } else {
-          expect(v).toBeNull();
         }
       };
       checkField(entry.priceAmazon);
@@ -74,8 +72,12 @@ live('Price Pulse E2E smoke — live Keepa API', () => {
     }
   });
 
-  it('pipeline.run returns true for a valid ASIN (full fetch → log path)', async () => {
-    const result = await run(LIVE_ASIN);
-    expect(result).toBe(true);
+  it('pipeline.run returns an AlertDecision for a valid ASIN (full fetch → analyze path)', async () => {
+    const result = await run(LIVE_ASIN, THRESHOLD_CENTS);
+    expect(result).not.toBe(false);
+    if (result !== false) {
+      expect(typeof result.should_alert).toBe('boolean');
+      expect(result.threshold).toBe(THRESHOLD_CENTS);
+    }
   });
 });
