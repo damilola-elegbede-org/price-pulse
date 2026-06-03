@@ -24,6 +24,7 @@ live('Price Pulse E2E smoke — live Keepa API', () => {
   let history: PriceHistory[];
 
   beforeAll(async () => {
+    process.env.TELEGRAM_SEND_SCRIPT ??= '/usr/bin/true'; // suppress real delivery in smoke context
     history = await getProductHistory(LIVE_ASIN);
   });
 
