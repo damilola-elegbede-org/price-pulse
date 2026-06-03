@@ -104,6 +104,18 @@ describe('parseProducts validation', () => {
   it('rejects empty products array', () => {
     expect(() => parseProducts(yaml.dump({ products: [] }))).toThrow(/at least one product/);
   });
+
+  it('rejects NaN alert_threshold_usd', () => {
+    const input = yaml.dump({ products: [{ name: 'Test', asin: 'B001E4KFG0', alert_threshold_usd: null, enabled: true }] })
+      .replace('alert_threshold_usd: null', 'alert_threshold_usd: .nan');
+    expect(() => parseProducts(input)).toThrow(/alert_threshold_usd must be a positive number/);
+  });
+
+  it('rejects Infinity alert_threshold_usd', () => {
+    const input = yaml.dump({ products: [{ name: 'Test', asin: 'B001E4KFG0', alert_threshold_usd: null, enabled: true }] })
+      .replace('alert_threshold_usd: null', 'alert_threshold_usd: .inf');
+    expect(() => parseProducts(input)).toThrow(/alert_threshold_usd must be a positive number/);
+  });
 });
 
 describe('thresholdToCents', () => {

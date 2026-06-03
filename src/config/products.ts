@@ -22,7 +22,7 @@ function validateProduct(p: unknown, index: number): Product {
   if (typeof r.asin !== 'string' || !ASIN_RE.test(r.asin)) {
     throw new Error(`products[${index}].asin must match /^[A-Z0-9]{10}$/ (got: ${r.asin})`);
   }
-  if (typeof r.alert_threshold_usd !== 'number' || r.alert_threshold_usd <= 0) {
+  if (typeof r.alert_threshold_usd !== 'number' || !isFinite(r.alert_threshold_usd) || r.alert_threshold_usd <= 0) {
     throw new Error(`products[${index}].alert_threshold_usd must be a positive number`);
   }
   if (typeof r.enabled !== 'boolean') {
