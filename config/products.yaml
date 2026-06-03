@@ -3,29 +3,30 @@
 # Schema:
 #   products[]:
 #     name               (string, required)  — human-readable label for alerts and logs
-#     asin               (string, required)  — Amazon Standard Identification Number, 10 chars
-#     keepa_product_id   (integer, optional) — Keepa internal product ID; null until first Keepa fetch
-#     alert_threshold_usd (number, required) — price drop alert threshold in USD (e.g. 12.99)
+#     asin               (string, required)  — Amazon ASIN, must match /^[A-Z0-9]{10}$/; must be unique
+#     alert_threshold_usd (number, required) — price drop alert threshold in USD (e.g. 12.99); must be > 0
 #     enabled            (boolean, required) — false suspends tracking without removing the product
 #
 # Monetary values use USD with up to 2 decimal places.
-# The pipeline converts to cents (×100, integer) before passing to analyzePrice/alert_config.
+# Pipeline converts to cents via Math.round(alert_threshold_usd * 100) before passing to
+# analyzePrice/alert_config. Math.round is required — Math.floor would silently truncate
+# (e.g. 18.99 * 100 = 1898.999... in IEEE 754).
+#
+# keepa_product_id is pipeline-managed state. It is NOT stored here; it belongs in the
+# SQLite alert_config table (ENG-570).
 
 products:
   - name: "Cafe Bustelo Espresso Ground Coffee, 10 oz"
     asin: "B001E4KFG0"
-    keepa_product_id: null
     alert_threshold_usd: 6.99
     enabled: true
 
   - name: "Lavazza Super Crema Whole Bean Coffee, 2.2 lb"
     asin: "B000NVTAZA"
-    keepa_product_id: null
     alert_threshold_usd: 18.99
     enabled: true
 
   - name: "Death Wish Coffee Whole Bean, Dark Roast, 1 lb"
     asin: "B00CKNYQSU"
-    keepa_product_id: null
     alert_threshold_usd: 14.99
     enabled: false
