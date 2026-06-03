@@ -63,7 +63,7 @@ live('Price Pulse E2E smoke — live Keepa API', () => {
 
     expect(typeof decision.should_alert).toBe('boolean');
     expect(decision.threshold).toBe(THRESHOLD_CENTS);
-    expect(typeof decision.drop_pct).toBe('number');
+    expect(Number.isFinite(decision.drop_pct)).toBe(true);
     // current_price is either a real USD-cent price or the -1 sentinel (no data)
     expect(decision.current_price === -1 || decision.current_price > 0).toBe(true);
     // If a price was found, should_alert reflects whether it is below threshold

@@ -26,7 +26,13 @@ export async function run(asin: string, thresholdCents: number): Promise<AlertDe
     return false;
   }
   console.log(`Fetched ${history.length} price points for ASIN ${asin}`);
-  return analyzePrice(history, thresholdCents);
+  const decision = analyzePrice(history, thresholdCents);
+  if (decision.should_alert) {
+    const price = (decision.current_price / 100).toFixed(2);
+    const threshold = (decision.threshold / 100).toFixed(2);
+    sendAlert(`price-pulse: price drop — $${price} (threshold: $${threshold})`);
+  }
+  return decision;
 }
 
 if (require.main === module) {

@@ -110,4 +110,20 @@ describe('pipeline.run', () => {
     expect(result).toMatchObject({ should_alert: false, current_price: -1, threshold: THRESHOLD });
     expect(mockSpawnSync).not.toHaveBeenCalled();
   });
+
+  it('sends a price-drop Telegram alert when should_alert is true', async () => {
+    mockGetProductHistory.mockResolvedValue([
+      { timestamp: new Date(), priceAmazon: 1000, priceNew: null, priceUsed: null },
+    ]);
+    const result = await run(ASIN, THRESHOLD);
+    expect(result).not.toBe(false);
+    if (result !== false) {
+      expect(result.should_alert).toBe(true);
+    }
+    expect(mockSpawnSync).toHaveBeenCalledWith(
+      expect.any(String),
+      ['--raw', expect.stringContaining('price-pulse: price drop')],
+      { stdio: 'inherit' },
+    );
+  });
 });
