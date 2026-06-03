@@ -1,12 +1,15 @@
 import { spawnSync } from 'child_process';
 import { getProductHistory } from './keepa/client';
+import { analyzePrice } from './price-analysis';
 import { run } from './pipeline';
 
 jest.mock('child_process', () => ({ spawnSync: jest.fn() }));
 jest.mock('./keepa/client', () => ({ getProductHistory: jest.fn() }));
+jest.mock('./price-analysis', () => ({ analyzePrice: jest.fn() }));
 
 const mockSpawnSync = spawnSync as jest.MockedFunction<typeof spawnSync>;
 const mockGetProductHistory = getProductHistory as jest.MockedFunction<typeof getProductHistory>;
+const mockAnalyzePrice = analyzePrice as jest.MockedFunction<typeof analyzePrice>;
 
 const ASIN = 'B001E4KFG0';
 const THRESHOLD = 3000;
@@ -106,15 +109,15 @@ describe('pipeline.run', () => {
 
   it('returns an AlertDecision and does not send any alert on successful fetch', async () => {
     mockGetProductHistory.mockResolvedValue([]);
+    mockAnalyzePrice.mockReturnValue({ should_alert: false, current_price: -1, threshold: THRESHOLD, drop_pct: 0 });
     const result = await run(ASIN, THRESHOLD);
     expect(result).toMatchObject({ should_alert: false, current_price: -1, threshold: THRESHOLD });
     expect(mockSpawnSync).not.toHaveBeenCalled();
   });
 
   it('sends a price-drop Telegram alert when should_alert is true', async () => {
-    mockGetProductHistory.mockResolvedValue([
-      { timestamp: new Date(), priceAmazon: 1000, priceNew: null, priceUsed: null },
-    ]);
+    mockGetProductHistory.mockResolvedValue([]);
+    mockAnalyzePrice.mockReturnValue({ should_alert: true, current_price: 1000, threshold: THRESHOLD, drop_pct: 66.7 });
     const result = await run(ASIN, THRESHOLD);
     expect(result).not.toBe(false);
     if (result !== false) {
