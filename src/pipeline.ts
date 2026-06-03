@@ -1,6 +1,7 @@
 import { spawnSync } from 'child_process';
 import { accessSync, constants } from 'fs';
 import { getProductHistory } from './keepa/client';
+import { analyzePrice, AlertDecision } from './price-analysis';
 
 function sendAlert(message: string): void {
   const script = process.env.TELEGRAM_SEND_SCRIPT;
@@ -14,7 +15,7 @@ function sendAlert(message: string): void {
   }
 }
 
-export async function run(asin: string): Promise<boolean> {
+export async function run(asin: string, thresholdCents: number): Promise<AlertDecision | false> {
   let history;
   try {
     history = await getProductHistory(asin);
@@ -25,13 +26,29 @@ export async function run(asin: string): Promise<boolean> {
     return false;
   }
   console.log(`Fetched ${history.length} price points for ASIN ${asin}`);
-  return true;
+  const decision = analyzePrice(history, thresholdCents);
+  if (decision.should_alert) {
+    const price = (decision.current_price / 100).toFixed(2);
+    const threshold = (decision.threshold / 100).toFixed(2);
+    sendAlert(`price-pulse: price drop — $${price} (threshold: $${threshold})`);
+  }
+  return decision;
 }
 
 if (require.main === module) {
   const asin = process.env.ASIN;
   if (!asin) {
     console.error('ASIN environment variable is required');
+    process.exit(1);
+  }
+  const thresholdRaw = process.env.THRESHOLD_CENTS;
+  if (!thresholdRaw) {
+    console.error('THRESHOLD_CENTS environment variable is required');
+    process.exit(1);
+  }
+  const thresholdCents = parseInt(thresholdRaw, 10);
+  if (isNaN(thresholdCents) || thresholdCents <= 0) {
+    console.error('THRESHOLD_CENTS must be a positive integer');
     process.exit(1);
   }
   const script = process.env.TELEGRAM_SEND_SCRIPT;
@@ -45,8 +62,8 @@ if (require.main === module) {
     console.error(`TELEGRAM_SEND_SCRIPT=${script} is not executable`);
     process.exit(1);
   }
-  run(asin).then(ok => {
-    if (!ok) process.exit(1);
+  run(asin, thresholdCents).then(result => {
+    if (!result) process.exit(1);
   }).catch(err => {
     console.error('Unexpected pipeline error:', err);
     process.exit(1);
