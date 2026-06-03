@@ -1,0 +1,31 @@
+# config/products.yaml — curated list of products tracked by price-pulse.
+#
+# Schema:
+#   products[]:
+#     name               (string, required)  — human-readable label for alerts and logs
+#     asin               (string, required)  — Amazon Standard Identification Number, 10 chars
+#     keepa_product_id   (integer, optional) — Keepa internal product ID; null until first Keepa fetch
+#     alert_threshold_usd (number, required) — price drop alert threshold in USD (e.g. 12.99)
+#     enabled            (boolean, required) — false suspends tracking without removing the product
+#
+# Monetary values use USD with up to 2 decimal places.
+# The pipeline converts to cents (×100, integer) before passing to analyzePrice/alert_config.
+
+products:
+  - name: "Cafe Bustelo Espresso Ground Coffee, 10 oz"
+    asin: "B001E4KFG0"
+    keepa_product_id: null
+    alert_threshold_usd: 6.99
+    enabled: true
+
+  - name: "Lavazza Super Crema Whole Bean Coffee, 2.2 lb"
+    asin: "B000NVTAZA"
+    keepa_product_id: null
+    alert_threshold_usd: 18.99
+    enabled: true
+
+  - name: "Death Wish Coffee Whole Bean, Dark Roast, 1 lb"
+    asin: "B00CKNYQSU"
+    keepa_product_id: null
+    alert_threshold_usd: 14.99
+    enabled: false

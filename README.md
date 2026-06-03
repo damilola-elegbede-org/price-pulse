@@ -101,6 +101,24 @@ Fetched 4821 price points for ASIN B001E4KFG0
 
 ## Configuration
 
+### Product list — `config/products.yaml`
+
+The curated set of tracked products lives in `config/products.yaml`. Each entry has:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Human-readable label used in alerts and logs |
+| `asin` | string | Yes | Amazon Standard Identification Number (10 chars) |
+| `keepa_product_id` | integer \| null | No | Keepa internal ID; populated on first successful fetch |
+| `alert_threshold_usd` | number | Yes | Alert fires when price drops below this value (USD, e.g. `12.99`) |
+| `enabled` | boolean | Yes | Set `false` to suspend tracking without removing the product |
+
+All monetary values in the YAML are **USD**. The pipeline converts to **cents** (×100, integer) before passing to `analyzePrice` and the `alert_config` table (matching the convention used throughout `src/` and the SQLite schema).
+
+Add, edit, or disable products directly in `config/products.yaml` — no code changes required.
+
+### Environment variables
+
 | Variable | Required | Purpose |
 |---|---|---|
 | `KEEPA_API_KEY` | Yes | Keepa API key |
@@ -134,6 +152,8 @@ Tests live alongside source in `src/`. Each module ships its own `.test.ts`:
 | ENG-265 | Keepa API client + token-bucket rate limiting | 🔄 In review |
 | ENG-377 | Price-comparison and alert-decision engine | 🔄 In review |
 | ENG-462 | Keepa fetch-failure alerting in daily pipeline | 🔄 In review |
+| ENG-570 | SQLite price-history and alert-state persistence schema | 🔄 In review |
+| ENG-497 | Product config list (`config/products.yaml`) | 🔄 In review |
 | ENG-254 | MVP sprint (storage, backfill, multi-ASIN) | 📋 Planned |
 
 See [docs/architecture.md](docs/architecture.md) for a component-level deep dive.
