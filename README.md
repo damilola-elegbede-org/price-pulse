@@ -88,29 +88,25 @@ ASIN=B001E4KFG0 TELEGRAM_SEND_SCRIPT=/path/to/send.sh node dist/pipeline.js
 
 ### Automated execution (launchd)
 
-The plist `launchd/bareclaude.price-pulse.daily-alert.plist` fires the pipeline daily at **09:00 Mountain Time** via `scripts/price-alert-run.sh`.
+The plist `launchd/disabled/bareclaude.price-pulse.daily-alert.plist` fires the pipeline daily at **09:00 Mountain Time** via `scripts/price-alert-run.sh`.
+
+> **Status: disabled pending ENG-254.** The plist lives in `launchd/disabled/` and is not loaded until `dist/pipeline.js` exists (requires ENG-254 MVP sprint merged and `npm run build` run).
 
 | Detail | Value |
 |---|---|
 | launchd label | `bareclaude.price-pulse.daily-alert` |
 | Fire time | 09:00 MT (local system clock) |
 | Credential source | `finn/.credentials/keepa-api.age` — decrypted at runtime; no `.env` needed in cron mode |
-| Prerequisite | `npm run build` must have been run and `dist/pipeline.js` must exist (see ENG-254) |
+| Prerequisite | ENG-254 merged + `npm run build` completed (`dist/pipeline.js` must exist) |
 
-**Install steps:**
+**Install (run after ENG-254 lands):**
 
 ```bash
-# 1. Build the pipeline first
 npm run build
-
-# 2. Symlink the plist into ~/Library/LaunchAgents
-ln -sf "$(pwd)/launchd/bareclaude.price-pulse.daily-alert.plist" \
-  ~/Library/LaunchAgents/bareclaude.price-pulse.daily-alert.plist
-
-# 3. Bootstrap
-launchctl bootstrap gui/$(id -u) \
-  ~/Library/LaunchAgents/bareclaude.price-pulse.daily-alert.plist
+./scripts/install-launchd.sh
 ```
+
+`install-launchd.sh` checks for `dist/pipeline.js`, symlinks the plist into `~/Library/LaunchAgents`, and bootstraps it. It exits 1 with a clear message if the build prerequisite is not met.
 
 Logs land in `finn/.state/price-alert-run.log`.
 

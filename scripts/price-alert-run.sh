@@ -22,11 +22,10 @@ if [[ ! -f "$PIPELINE_JS" ]]; then
   exit 1
 fi
 
-KEEPA_API_KEY=$(/opt/homebrew/bin/age -d -i "$AGE_KEY" "$KEEPA_CRED" 2>/dev/null)
-if [[ -z "$KEEPA_API_KEY" ]]; then
+KEEPA_API_KEY=$(/opt/homebrew/bin/age -d -i "$AGE_KEY" "$KEEPA_CRED") || {
   echo "[price-pulse] ERROR: failed to decrypt $KEEPA_CRED" >&2
   exit 1
-fi
+}
 
 # Accepted risk (Nyx FINDING 1 / ENG-571): KEEPA_API_KEY is exported as an env var,
 # which is briefly readable by same-UID processes via `ps auxeww` for the duration of
