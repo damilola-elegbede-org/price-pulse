@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>bareclaude.price-pulse.daily-alert</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/daelegbe/BareClaude/finn/repos/price-pulse/scripts/price-alert-run.sh</string>
+  </array>
+
+  <!-- ASIN is intentionally omitted: post-ENG-254 the pipeline entry point switches
+       to runAll(db), which reads all tracked ASINs from the DB_PATH database instead
+       of a single env-var ASIN. No ASIN key is needed or expected after that merge.
+       The current src/pipeline.ts (pre-ENG-254) does require ASIN, which is why this
+       plist must remain in launchd/disabled/ until ENG-254 is merged. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>DB_PATH</key>
+    <string>/Users/daelegbe/BareClaude/finn/.state/price-pulse.db</string>
+    <key>TELEGRAM_SEND_SCRIPT</key>
+    <string>/Users/daelegbe/BareClaude/finn/scripts/telegram-send.sh</string>
+  </dict>
+
+  <!-- Daily at 09:00 Mountain Time (launchd uses system local clock) -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/daelegbe/BareClaude/finn/.state/price-alert-run.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/daelegbe/BareClaude/finn/.state/price-alert-run.log</string>
+
+  <!-- All paths in price-alert-run.sh are absolute; this prevents surprises if a
+       relative path ever slips in (Nyx FINDING 3). -->
+  <key>WorkingDirectory</key>
+  <string>/Users/daelegbe/BareClaude/finn/repos/price-pulse</string>
+
+  <!-- Log safety (Nyx FINDING 2): pipeline.js does not log process.env or
+       KEEPA_API_KEY in any code path (error handlers log err.message only).
+       Confirmed against src/pipeline.ts and src/keepa/client.ts. If either
+       file changes to log env state, revisit log encryption. -->
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
