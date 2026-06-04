@@ -10,6 +10,9 @@ KEEPA_CRED="$REPO_ROOT/finn/.credentials/keepa-api.age"
 
 # TODO(ENG-254): confirm PIPELINE_JS path once Finn's MVP sprint is merged and
 # the full pipeline is available via npm run build in this repo.
+# Post-ENG-254: the pipeline entry point switches from single-ASIN (env var) to
+# runAll(db), which reads all tracked ASINs from DB_PATH. ASIN env var is not
+# required after that merge — the plist intentionally omits it.
 PIPELINE_JS="$REPO_ROOT/finn/repos/price-pulse/dist/pipeline.js"
 
 if [[ ! -f "$KEEPA_CRED" ]]; then
