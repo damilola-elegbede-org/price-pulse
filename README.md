@@ -86,6 +86,34 @@ npm run build
 ASIN=B001E4KFG0 TELEGRAM_SEND_SCRIPT=/path/to/send.sh node dist/pipeline.js
 ```
 
+### Automated execution (launchd)
+
+The plist `launchd/bareclaude.price-pulse.daily-alert.plist` fires the pipeline daily at **09:00 Mountain Time** via `scripts/price-alert-run.sh`.
+
+| Detail | Value |
+|---|---|
+| launchd label | `bareclaude.price-pulse.daily-alert` |
+| Fire time | 09:00 MT (local system clock) |
+| Credential source | `finn/.credentials/keepa-api.age` — decrypted at runtime; no `.env` needed in cron mode |
+| Prerequisite | `npm run build` must have been run and `dist/pipeline.js` must exist (see ENG-254) |
+
+**Install steps:**
+
+```bash
+# 1. Build the pipeline first
+npm run build
+
+# 2. Symlink the plist into ~/Library/LaunchAgents
+ln -sf "$(pwd)/launchd/bareclaude.price-pulse.daily-alert.plist" \
+  ~/Library/LaunchAgents/bareclaude.price-pulse.daily-alert.plist
+
+# 3. Bootstrap
+launchctl bootstrap gui/$(id -u) \
+  ~/Library/LaunchAgents/bareclaude.price-pulse.daily-alert.plist
+```
+
+Logs land in `finn/.state/price-alert-run.log`.
+
 **Exit codes**
 
 | Code | Meaning |
@@ -106,6 +134,7 @@ Fetched 4821 price points for ASIN B001E4KFG0
 | `KEEPA_API_KEY` | Yes | Keepa API key |
 | `ASIN` | Yes (CLI) | Amazon ASIN to track |
 | `TELEGRAM_SEND_SCRIPT` | Yes (CLI) | Path to an executable that accepts `--raw <message>` for alert delivery |
+| `DB_PATH` | No (reserved) | SQLite database path — injected by the launchd plist, not yet read by the pipeline. Will be consumed when ENG-254 (storage + backfill) lands. |
 
 `TELEGRAM_SEND_SCRIPT` is validated as executable at startup. The pipeline exits 1 if it is unset or not executable.
 
@@ -135,6 +164,7 @@ Tests live alongside source in `src/`. Each module ships its own `.test.ts`:
 | ENG-377 | Price-comparison and alert-decision engine | 🔄 In review |
 | ENG-462 | Keepa fetch-failure alerting in daily pipeline | 🔄 In review |
 | ENG-254 | MVP sprint (storage, backfill, multi-ASIN) | 📋 Planned |
+| ENG-571 | Daily launchd cron + wrapper script (`scripts/price-alert-run.sh`) | 🔄 In review |
 
 See [docs/architecture.md](docs/architecture.md) for a component-level deep dive.
 

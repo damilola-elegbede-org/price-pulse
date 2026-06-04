@@ -34,6 +34,15 @@
   <key>StandardErrorPath</key>
   <string>/Users/daelegbe/BareClaude/finn/.state/price-alert-run.log</string>
 
+  <!-- All paths in price-alert-run.sh are absolute; this prevents surprises if a
+       relative path ever slips in (Nyx FINDING 3). -->
+  <key>WorkingDirectory</key>
+  <string>/Users/daelegbe/BareClaude/finn/repos/price-pulse</string>
+
+  <!-- Log safety (Nyx FINDING 2): pipeline.js does not log process.env or
+       KEEPA_API_KEY in any code path (error handlers log err.message only).
+       Confirmed against src/pipeline.ts and src/keepa/client.ts. If either
+       file changes to log env state, revisit log encryption. -->
   <key>RunAtLoad</key>
   <false/>
 </dict>

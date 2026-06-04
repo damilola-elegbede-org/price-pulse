@@ -27,6 +27,11 @@ if [[ -z "$KEEPA_API_KEY" ]]; then
   echo "[price-pulse] ERROR: failed to decrypt $KEEPA_CRED" >&2
   exit 1
 fi
+
+# Accepted risk (Nyx FINDING 1 / ENG-571): KEEPA_API_KEY is exported as an env var,
+# which is briefly readable by same-UID processes via `ps auxeww` for the duration of
+# the node run. Mitigation via stdin injection requires pipeline changes tracked in
+# ENG-572 (Finn). Exposure window is short (<30s typical run time).
 export KEEPA_API_KEY
 
 exec /opt/homebrew/bin/node "$PIPELINE_JS"
