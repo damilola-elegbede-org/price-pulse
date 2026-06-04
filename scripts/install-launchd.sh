@@ -20,5 +20,6 @@ fi
 ln -sf "$PLIST_SRC" "$PLIST_DEST"
 echo "[install-launchd] Symlinked $PLIST_LABEL → $PLIST_DEST"
 
+launchctl bootout "gui/$(id -u)/$PLIST_LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST_DEST"
 echo "[install-launchd] Bootstrapped $PLIST_LABEL"
