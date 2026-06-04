@@ -26,6 +26,7 @@ KEEPA_API_KEY=$(/opt/homebrew/bin/age -d -i "$AGE_KEY" "$KEEPA_CRED") || {
   echo "[price-pulse] ERROR: failed to decrypt $KEEPA_CRED" >&2
   exit 1
 }
+[[ -n "$KEEPA_API_KEY" ]] || { echo "[price-pulse] ERROR: decrypted key is empty" >&2; exit 1; }
 
 # Accepted risk (Nyx FINDING 1 / ENG-571): KEEPA_API_KEY is exported as an env var,
 # which is briefly readable by same-UID processes via `ps auxeww` for the duration of
