@@ -26,7 +26,7 @@
     "transform": {
       "^.+\\.tsx?$": ["ts-jest", { "tsconfig": "tsconfig.test.json" }]
     },
-    "collectCoverageFrom": ["src/keepa/client.ts"],
+    "collectCoverageFrom": ["src/keepa/client.ts", "src/price-analysis.ts"],
     "coverageThreshold": {
       "global": {
         "lines": 80,

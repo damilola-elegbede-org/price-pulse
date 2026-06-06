@@ -66,9 +66,16 @@ function hasMinDaysOfHistory(history: PriceHistory[], minDays: number): boolean 
   return newestMs - oldestMs >= minDays * 86_400_000;
 }
 
-/** Mirrors pipeline.ts sendAlert — call only when should_alert is true. */
+/**
+ * Mirrors pipeline.ts sendAlert — call only when should_alert is true.
+ * Exercises call-count and args only; env guard matches production behaviour.
+ */
 function dispatchAlert(priceCents: number, dropPct: number): void {
-  const script = process.env.TELEGRAM_SEND_SCRIPT!;
+  const script = process.env.TELEGRAM_SEND_SCRIPT;
+  if (!script) {
+    console.error('[price-pulse] alert not sent: TELEGRAM_SEND_SCRIPT env var is not set');
+    return;
+  }
   const msg = `price-pulse: price dropped to $${(priceCents / 100).toFixed(2)} (${dropPct.toFixed(1)}% below threshold)`;
   spawnSync(script, ['--raw', msg.slice(0, 120)], { stdio: 'inherit' });
 }
@@ -93,7 +100,7 @@ describe('Price Pulse E2E: Keepa mock → price analysis → Telegram alert', ()
     delete process.env.TELEGRAM_SEND_SCRIPT;
   });
 
-  it('scenario A: product at $100 seven days ago, $85 today (15% drop) — alert fires exactly once', () => {
+  it('scenario A: product at $100 seven days ago, $85 today (5.6% below threshold) — alert fires exactly once', () => {
     const history = buildHistory([
       { daysAgo: 7, priceCents: 10_000 },
       { daysAgo: 6, priceCents: 10_000 },
@@ -110,7 +117,7 @@ describe('Price Pulse E2E: Keepa mock → price analysis → Telegram alert', ()
 
     expect(decision.should_alert).toBe(true);
     expect(decision.current_price).toBe(8_500);
-    expect(decision.drop_pct).toBeGreaterThan(0); // price is below threshold
+    expect(decision.drop_pct).toBeCloseTo(5.56, 1); // (9000 - 8500) / 9000 * 100
 
     if (decision.should_alert) {
       dispatchAlert(decision.current_price, decision.drop_pct);
@@ -172,5 +179,23 @@ describe('Price Pulse E2E: Keepa mock → price analysis → Telegram alert', ()
     }
 
     expect(mockSpawn).toHaveBeenCalledTimes(0);
+  });
+
+  it('scenario D: latest data point has no price — no alert, current_price is -1 sentinel', () => {
+    const history = buildHistory([
+      { daysAgo: 7, priceCents: 10_000 },
+      { daysAgo: 0, priceCents: null }, // unavailable
+    ]);
+
+    const decision = analyzePrice(history, THRESHOLD_CENTS);
+
+    expect(decision.should_alert).toBe(false);
+    expect(decision.current_price).toBe(-1);
+
+    if (decision.should_alert) {
+      dispatchAlert(decision.current_price, decision.drop_pct);
+    }
+
+    expect(mockSpawn).not.toHaveBeenCalled();
   });
 });
