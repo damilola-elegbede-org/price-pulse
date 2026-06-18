@@ -1,5 +1,6 @@
 import { spawnSync } from 'child_process';
 import { getProductHistory } from './keepa/client';
+import { openDb, insertAlertLog, upsertAlertConfig } from './db';
 import { run } from './pipeline';
 
 jest.mock('child_process', () => ({ spawnSync: jest.fn() }));
@@ -105,6 +106,82 @@ describe('pipeline.run', () => {
 
   it('returns true and does not send any alert on successful fetch', async () => {
     mockGetProductHistory.mockResolvedValue([]);
+    const result = await run(ASIN);
+    expect(result).toBe(true);
+    expect(mockSpawnSync).not.toHaveBeenCalled();
+  });
+});
+
+describe('pipeline.run — dedup guard', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSpawnSync.mockReturnValue(SPAWN_SUCCESS);
+    process.env.TELEGRAM_SEND_SCRIPT = 'mock-telegram-send.sh';
+  });
+
+  afterEach(() => {
+    delete process.env.TELEGRAM_SEND_SCRIPT;
+  });
+
+  it('sends alert and writes to alert_log when no prior alert exists', async () => {
+    const db = openDb(':memory:');
+    upsertAlertConfig(db, ASIN, 2000);
+    mockGetProductHistory.mockResolvedValue([{ timestamp: new Date(), priceAmazon: 1999, priceNew: null, priceUsed: null }]);
+    const result = await run(ASIN, db);
+    expect(result).toBe(true);
+    expect(mockSpawnSync).toHaveBeenCalledWith(
+      expect.any(String),
+      ['--raw', 'price-pulse: ASIN B001E4KFG0 dropped to 19.99 USD'],
+      { stdio: 'inherit' },
+    );
+    const row = db.prepare('SELECT price_at_alert FROM alert_log WHERE asin = ?').get(ASIN) as { price_at_alert: number } | undefined;
+    expect(row?.price_at_alert).toBe(1999);
+    db.close();
+  });
+
+  it('skips alert when current price equals last alerted price', async () => {
+    const db = openDb(':memory:');
+    upsertAlertConfig(db, ASIN, 2000);
+    insertAlertLog(db, ASIN, 1000000, 1999);
+    mockGetProductHistory.mockResolvedValue([{ timestamp: new Date(), priceAmazon: 1999, priceNew: null, priceUsed: null }]);
+    const result = await run(ASIN, db);
+    expect(result).toBe(true);
+    expect(mockSpawnSync).not.toHaveBeenCalled();
+    db.close();
+  });
+
+  it('skips alert when current price is higher than last alerted price', async () => {
+    const db = openDb(':memory:');
+    upsertAlertConfig(db, ASIN, 2000);
+    insertAlertLog(db, ASIN, 1000000, 1999);
+    mockGetProductHistory.mockResolvedValue([{ timestamp: new Date(), priceAmazon: 2199, priceNew: null, priceUsed: null }]);
+    const result = await run(ASIN, db);
+    expect(result).toBe(true);
+    expect(mockSpawnSync).not.toHaveBeenCalled();
+    db.close();
+  });
+
+  it('sends alert when price drops below last alerted price', async () => {
+    const db = openDb(':memory:');
+    upsertAlertConfig(db, ASIN, 3000);
+    insertAlertLog(db, ASIN, 1000000, 2999);
+    mockGetProductHistory.mockResolvedValue([{ timestamp: new Date(), priceAmazon: 1999, priceNew: null, priceUsed: null }]);
+    const result = await run(ASIN, db);
+    expect(result).toBe(true);
+    expect(mockSpawnSync).toHaveBeenCalledWith(
+      expect.any(String),
+      ['--raw', 'price-pulse: ASIN B001E4KFG0 dropped to 19.99 USD'],
+      { stdio: 'inherit' },
+    );
+    const rows = db
+      .prepare('SELECT price_at_alert FROM alert_log WHERE asin = ? ORDER BY alert_ts DESC')
+      .all(ASIN) as { price_at_alert: number }[];
+    expect(rows[0].price_at_alert).toBe(1999);
+    db.close();
+  });
+
+  it('returns true without alert when called without db and history is non-empty', async () => {
+    mockGetProductHistory.mockResolvedValue([{ timestamp: new Date(), priceAmazon: 1999, priceNew: null, priceUsed: null }]);
     const result = await run(ASIN);
     expect(result).toBe(true);
     expect(mockSpawnSync).not.toHaveBeenCalled();

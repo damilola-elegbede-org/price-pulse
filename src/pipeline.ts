@@ -1,6 +1,8 @@
 import { spawnSync } from 'child_process';
 import { accessSync, constants } from 'fs';
 import { getProductHistory } from './keepa/client';
+import type { Db } from './db';
+import { getLastAlertedPrice, insertAlertLog } from './db';
 
 function sendAlert(message: string): void {
   const script = process.env.TELEGRAM_SEND_SCRIPT;
@@ -14,7 +16,7 @@ function sendAlert(message: string): void {
   }
 }
 
-export async function run(asin: string): Promise<boolean> {
+export async function run(asin: string, db?: Db): Promise<boolean> {
   let history;
   try {
     history = await getProductHistory(asin);
@@ -25,6 +27,25 @@ export async function run(asin: string): Promise<boolean> {
     return false;
   }
   console.log(`Fetched ${history.length} price points for ASIN ${asin}`);
+
+  if (history.length === 0) return true;
+
+  const latestPoint = history[history.length - 1];
+  const currentPrice = latestPoint.priceAmazon ?? latestPoint.priceNew ?? latestPoint.priceUsed;
+  if (currentPrice === null || currentPrice === undefined) return true;
+
+  if (db !== undefined) {
+    const lastAlertedPrice = getLastAlertedPrice(db, asin);
+    if (lastAlertedPrice !== null && currentPrice >= lastAlertedPrice) {
+      console.log(`[dedup] Skipping alert for ${asin}: current ${currentPrice}¢ >= last alerted ${lastAlertedPrice}¢`);
+      return true;
+    }
+    const alertTs = Math.floor(Date.now() / 1000);
+    sendAlert(`price-pulse: ASIN ${asin} dropped to ${(currentPrice / 100).toFixed(2)} USD`);
+    insertAlertLog(db, asin, alertTs, currentPrice);
+    return true;
+  }
+
   return true;
 }
 
