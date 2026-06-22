@@ -51,7 +51,10 @@ export async function runBatch(
 
   if (rateLimited.length >= 3) {
     const msg = `Price Pulse: Keepa rate limit hit — ${rateLimited.length} products skipped`;
-    spawnSync(slackPostScript, ['post', 'alerts', msg, 'dara'], { stdio: 'inherit' });
+    const alertResult = spawnSync(slackPostScript, ['post', 'alerts', msg, 'dara'], { stdio: 'inherit' });
+    if (alertResult.error || (alertResult.status !== null && alertResult.status !== 0)) {
+      console.error(`[price-pulse] Slack alert delivery failed (status=${alertResult.status ?? 'null'}):`, alertResult.error?.message ?? '');
+    }
   }
 
   return { ok, rateLimited };

@@ -133,8 +133,12 @@ export async function getProductHistory(asin: string): Promise<PriceHistory[]> {
   if (response.status === 429) {
     const retryAfter = response.headers.get('Retry-After');
     const logPath = `${process.env.STATE_DIR ?? '.state'}/price-alert-errors.jsonl`;
-    mkdirSync(dirname(logPath), { recursive: true });
-    appendFileSync(logPath, JSON.stringify({ timestamp: new Date().toISOString(), asin, retryAfter }) + '\n');
+    try {
+      mkdirSync(dirname(logPath), { recursive: true });
+      appendFileSync(logPath, JSON.stringify({ timestamp: new Date().toISOString(), asin, retryAfter }) + '\n');
+    } catch {
+      // logging failure must not suppress the typed error
+    }
     throw new KeepaRateLimitError(asin, retryAfter);
   }
   if (!response.ok) {
