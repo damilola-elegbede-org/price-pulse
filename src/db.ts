@@ -105,3 +105,10 @@ export function getRecentAlerts(db: Db, asin: string, sinceTs: number): AlertLog
     .prepare('SELECT * FROM alert_log WHERE asin = ? AND alert_ts >= ? ORDER BY alert_ts DESC')
     .all(asin, sinceTs) as AlertLogRow[];
 }
+
+export function getLastAlertedPrice(db: Db, asin: string): number | null {
+  const row = db
+    .prepare('SELECT price_at_alert FROM alert_log WHERE asin = ? ORDER BY alert_ts DESC LIMIT 1')
+    .get(asin) as { price_at_alert: number } | undefined;
+  return row?.price_at_alert ?? null;
+}
