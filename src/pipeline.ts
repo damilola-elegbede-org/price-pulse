@@ -1,6 +1,6 @@
 import { spawnSync } from 'child_process';
 import { accessSync, constants } from 'fs';
-import { getProductHistory } from './keepa/client';
+import { getProductHistory, KeepaRateLimitError } from './keepa/client';
 
 function sendAlert(message: string): void {
   const script = process.env.TELEGRAM_SEND_SCRIPT;
@@ -19,6 +19,9 @@ export async function run(asin: string): Promise<boolean> {
   try {
     history = await getProductHistory(asin);
   } catch (err: unknown) {
+    if (err instanceof KeepaRateLimitError) {
+      throw err; // Let runBatch aggregate rate-limit errors; don't send generic alert
+    }
     const detail = err instanceof Error ? err.message : String(err);
     console.error('[keepa] fetch error:', detail);
     sendAlert('price-pulse: Keepa fetch failed — see pipeline logs');
@@ -26,6 +29,35 @@ export async function run(asin: string): Promise<boolean> {
   }
   console.log(`Fetched ${history.length} price points for ASIN ${asin}`);
   return true;
+}
+
+export async function runBatch(
+  asins: string[],
+  slackPostScript = process.env.SLACK_POST_SCRIPT ?? './scripts/slack-post.sh',
+): Promise<{ ok: number; rateLimited: string[] }> {
+  const rateLimited: string[] = [];
+  let ok = 0;
+
+  for (const asin of asins) {
+    try {
+      const success = await run(asin);
+      if (success) ok++;
+    } catch (err) {
+      if (err instanceof KeepaRateLimitError) {
+        rateLimited.push(asin);
+      }
+    }
+  }
+
+  if (rateLimited.length >= 3) {
+    const msg = `Price Pulse: Keepa rate limit hit — ${rateLimited.length} products skipped`;
+    const alertResult = spawnSync(slackPostScript, ['post', 'alerts', msg, 'dara'], { stdio: 'inherit' });
+    if (alertResult.error || (alertResult.status !== null && alertResult.status !== 0)) {
+      console.error(`[price-pulse] Slack alert delivery failed (status=${alertResult.status ?? 'null'}):`, alertResult.error?.message ?? '');
+    }
+  }
+
+  return { ok, rateLimited };
 }
 
 if (require.main === module) {

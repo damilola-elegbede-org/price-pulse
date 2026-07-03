@@ -1,5 +1,15 @@
+import { appendFileSync, mkdirSync } from 'fs';
+import { dirname } from 'path';
+
 // Keepa time epoch: minutes since 2011-01-01T00:00:00 UTC
 const KEEPA_EPOCH_MS = Date.UTC(2011, 0, 1);
+
+export class KeepaRateLimitError extends Error {
+  constructor(public readonly asin: string, public readonly retryAfter: string | null) {
+    super(`Keepa rate limit (429) for ASIN ${asin}${retryAfter ? `; retry after ${retryAfter}s` : ''}`);
+    this.name = 'KeepaRateLimitError';
+  }
+}
 
 export interface PriceHistory {
   timestamp: Date;
@@ -120,6 +130,17 @@ export async function getProductHistory(asin: string): Promise<PriceHistory[]> {
   url.searchParams.set('history', '1');
 
   const response = await fetch(url.toString());
+  if (response.status === 429) {
+    const retryAfter = response.headers.get('Retry-After');
+    const logPath = `${process.env.STATE_DIR ?? '.state'}/price-alert-errors.jsonl`;
+    try {
+      mkdirSync(dirname(logPath), { recursive: true });
+      appendFileSync(logPath, JSON.stringify({ timestamp: new Date().toISOString(), asin, retryAfter }) + '\n');
+    } catch {
+      // logging failure must not suppress the typed error
+    }
+    throw new KeepaRateLimitError(asin, retryAfter);
+  }
   if (!response.ok) {
     throw new Error(`Keepa API error: HTTP ${response.status}`);
   }

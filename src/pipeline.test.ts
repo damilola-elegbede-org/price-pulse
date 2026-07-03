@@ -1,9 +1,12 @@
 import { spawnSync } from 'child_process';
-import { getProductHistory } from './keepa/client';
-import { run } from './pipeline';
+import { getProductHistory, KeepaRateLimitError } from './keepa/client';
+import { run, runBatch } from './pipeline';
 
 jest.mock('child_process', () => ({ spawnSync: jest.fn() }));
-jest.mock('./keepa/client', () => ({ getProductHistory: jest.fn() }));
+jest.mock('./keepa/client', () => {
+  const actual = jest.requireActual('./keepa/client');
+  return { ...actual, getProductHistory: jest.fn() };
+});
 
 const mockSpawnSync = spawnSync as jest.MockedFunction<typeof spawnSync>;
 const mockGetProductHistory = getProductHistory as jest.MockedFunction<typeof getProductHistory>;
@@ -108,5 +111,56 @@ describe('pipeline.run', () => {
     const result = await run(ASIN);
     expect(result).toBe(true);
     expect(mockSpawnSync).not.toHaveBeenCalled();
+  });
+});
+
+describe('runBatch', () => {
+  const ASINS = ['B001', 'B002', 'B003'];
+  const SLACK_SCRIPT = 'mock-slack-post.sh';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSpawnSync.mockReturnValue(SPAWN_SUCCESS);
+    process.env.TELEGRAM_SEND_SCRIPT = 'mock-telegram-send.sh';
+  });
+
+  afterEach(() => {
+    delete process.env.TELEGRAM_SEND_SCRIPT;
+  });
+
+  it('returns ok count and empty rateLimited when all succeed', async () => {
+    mockGetProductHistory.mockResolvedValue([]);
+    const result = await runBatch(ASINS, SLACK_SCRIPT);
+    expect(result).toEqual({ ok: 3, rateLimited: [] });
+  });
+
+  it('does not call Slack when fewer than 3 ASINs are rate-limited', async () => {
+    mockGetProductHistory
+      .mockRejectedValueOnce(new KeepaRateLimitError('B001', null))
+      .mockRejectedValueOnce(new KeepaRateLimitError('B002', null))
+      .mockResolvedValueOnce([]);
+    const result = await runBatch(ASINS, SLACK_SCRIPT);
+    expect(result.rateLimited).toEqual(['B001', 'B002']);
+    expect(result.ok).toBe(1);
+    expect(mockSpawnSync).not.toHaveBeenCalled();
+  });
+
+  it('calls Slack with correct message when 3 or more ASINs are rate-limited', async () => {
+    mockGetProductHistory.mockRejectedValue(new KeepaRateLimitError('X', null));
+    const result = await runBatch(ASINS, SLACK_SCRIPT);
+    expect(result.rateLimited).toHaveLength(3);
+    expect(mockSpawnSync).toHaveBeenCalledWith(
+      SLACK_SCRIPT,
+      ['post', 'alerts', 'Price Pulse: Keepa rate limit hit — 3 products skipped', 'dara'],
+      { stdio: 'inherit' },
+    );
+  });
+
+  it('includes the correct count in Slack message for 4 rate-limited ASINs', async () => {
+    const fourAsins = ['B001', 'B002', 'B003', 'B004'];
+    mockGetProductHistory.mockRejectedValue(new KeepaRateLimitError('X', null));
+    await runBatch(fourAsins, SLACK_SCRIPT);
+    const lastCall = mockSpawnSync.mock.calls[mockSpawnSync.mock.calls.length - 1] as [string, string[]];
+    expect(lastCall[1][2]).toBe('Price Pulse: Keepa rate limit hit — 4 products skipped');
   });
 });
