@@ -37,4 +37,18 @@ KEEPA_API_KEY=$(/opt/homebrew/bin/age -d -i "$AGE_KEY" "$KEEPA_CRED") || {
 # ENG-572 (Finn). Exposure window is short (<30s typical run time).
 export KEEPA_API_KEY
 
-exec /opt/homebrew/bin/node "$PIPELINE_JS"
+# Run pipeline; capture exit code so heartbeat is always written (ENG-722).
+set +e
+/opt/homebrew/bin/node "$PIPELINE_JS"
+PIPELINE_EXIT=$?
+set -e
+
+# Write dead-man-switch heartbeat (ENG-722): heartbeat-runner checks freshness.
+HEARTBEAT_DIR="$REPO_ROOT/dara/.state"
+mkdir -p "$HEARTBEAT_DIR"
+NOW_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+NEXT_ISO=$(date -u -v+1d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '+1 day' +%Y-%m-%dT%H:%M:%SZ)
+printf '{"last_run":"%s","next_expected":"%s","exit_code":%d}\n' \
+  "$NOW_ISO" "$NEXT_ISO" "$PIPELINE_EXIT" > "$HEARTBEAT_DIR/price-alert.json"
+
+exit $PIPELINE_EXIT
