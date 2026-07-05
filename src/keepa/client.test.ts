@@ -1,4 +1,14 @@
-import { TokenBucket, getProductHistory, PriceHistory } from './client';
+import { appendFileSync, mkdirSync } from 'fs';
+import { TokenBucket, getProductHistory, KeepaRateLimitError, PriceHistory } from './client';
+
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  appendFileSync: jest.fn(),
+  mkdirSync: jest.fn(),
+}));
+
+const mockAppendFileSync = appendFileSync as jest.MockedFunction<typeof appendFileSync>;
+const mockMkdirSync = mkdirSync as jest.MockedFunction<typeof mkdirSync>;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -6,12 +16,13 @@ function keepaMs(keepaMinutes: number): number {
   return Date.UTC(2011, 0, 1) + keepaMinutes * 60_000;
 }
 
-function mockFetch(body: unknown, ok = true, status = 200): void {
+function mockFetch(body: unknown, ok = true, status = 200, headers: Record<string, string> = {}): void {
   global.fetch = jest.fn().mockResolvedValue({
     ok,
     status,
     statusText: ok ? 'OK' : 'Error',
     json: async () => body,
+    headers: { get: (name: string) => headers[name] ?? null },
   } as unknown as Response);
 }
 
@@ -82,6 +93,7 @@ const MOCK_PRODUCT = {
 
 describe('getProductHistory', () => {
   beforeEach(() => {
+    jest.clearAllMocks();
     process.env.KEEPA_API_KEY = 'test-key';
   });
 
@@ -180,5 +192,41 @@ describe('getProductHistory', () => {
     mockFetch({});
 
     await expect(getProductHistory(ASIN)).rejects.toThrow(ASIN);
+  });
+
+  // ── 429 rate-limit handling ──────────────────────────────────────────────────
+
+  it('throws KeepaRateLimitError on 429 response', async () => {
+    mockFetch(null, false, 429, { 'Retry-After': '60' });
+
+    await expect(getProductHistory(ASIN)).rejects.toBeInstanceOf(KeepaRateLimitError);
+  });
+
+  it('logs 429 error to .state/price-alert-errors.jsonl with timestamp, asin, retryAfter', async () => {
+    mockFetch(null, false, 429, { 'Retry-After': '60' });
+    mockMkdirSync.mockReturnValue(undefined);
+    mockAppendFileSync.mockReturnValue(undefined);
+
+    await expect(getProductHistory(ASIN)).rejects.toBeInstanceOf(KeepaRateLimitError);
+
+    expect(mockMkdirSync).toHaveBeenCalledWith(expect.any(String), { recursive: true });
+    expect(mockAppendFileSync).toHaveBeenCalledTimes(1);
+    const [logPath, entry] = mockAppendFileSync.mock.calls[0] as [string, string];
+    expect(logPath).toMatch(/price-alert-errors\.jsonl$/);
+    const parsed = JSON.parse(entry.trim());
+    expect(parsed.asin).toBe(ASIN);
+    expect(parsed.retryAfter).toBe('60');
+    expect(parsed.timestamp).toBeTruthy();
+  });
+
+  it('logs null retryAfter when Retry-After header is absent', async () => {
+    mockFetch(null, false, 429);
+    mockMkdirSync.mockReturnValue(undefined);
+    mockAppendFileSync.mockReturnValue(undefined);
+
+    await expect(getProductHistory(ASIN)).rejects.toBeInstanceOf(KeepaRateLimitError);
+
+    const [, entry] = mockAppendFileSync.mock.calls[0] as [string, string];
+    expect(JSON.parse(entry.trim()).retryAfter).toBeNull();
   });
 });
